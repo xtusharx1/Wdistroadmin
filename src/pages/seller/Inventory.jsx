@@ -43,7 +43,6 @@ function StockRow({ product, sNo, onSaved }) {
       </td>
       <td className="px-4 py-3 font-medium text-gray-900">{product.name}</td>
       <td className="px-4 py-3 text-gray-500">{product.category}</td>
-      <td className="px-4 py-3 text-gray-500">{product.unit}</td>
       <td className="px-4 py-3 text-gray-600">{fmt(product.price)}</td>
       <td className="px-4 py-3">
         <input
@@ -141,7 +140,7 @@ export default function Inventory() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['S.No', 'Image', 'Name', 'Category', 'Unit', 'Price', 'Stock Qty', 'Save'].map((h) => (
+              {['S.No', 'Image', 'Name', 'Category', 'Price', 'Stock Qty', 'Save'].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                   {h}
                 </th>

@@ -123,6 +123,7 @@ export default function AdminOrders() {
         name: item.Product?.name || `Product #${item.product_id}`,
         unit: item.Product?.unit || '',
         price: item.price,
+        custom_price: item.custom_price || '',
         requested_qty: item.requested_qty,
         approved_qty: item.requested_qty,
       })),
@@ -140,12 +141,27 @@ export default function AdminOrders() {
     }))
   }
 
+  const updateItemPrice = (itemId, price) => {
+    setProcessModal((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.id === itemId
+          ? { ...item, custom_price: price }
+          : item
+      ),
+    }))
+  }
+
   const submitProcess = async () => {
     setUpdating('process')
     try {
       await processOrder(
         processModal.order.id,
-        processModal.items.map(({ id, approved_qty }) => ({ id, approved_qty }))
+        processModal.items.map(({ id, approved_qty, custom_price }) => ({
+          id,
+          approved_qty,
+          custom_price: custom_price !== '' && !isNaN(parseFloat(custom_price)) ? parseFloat(custom_price) : null
+        }))
       )
       notify('Order approved and processed successfully.')
       setProcessModal(null)
@@ -184,7 +200,10 @@ export default function AdminOrders() {
   })
 
   const approvedTotal = processModal?.items.reduce(
-    (s, item) => s + item.price * item.approved_qty,
+    (s, item) => {
+      const price = item.custom_price !== '' && !isNaN(parseFloat(item.custom_price)) ? parseFloat(item.custom_price) : item.price;
+      return s + price * item.approved_qty;
+    },
     0
   ) ?? 0
 
@@ -410,17 +429,27 @@ export default function AdminOrders() {
               <tbody className="divide-y divide-gray-100">
                 {(detail.OrderItems || []).map((item) => {
                   const qty = item.approved_qty ?? item.requested_qty
+                  const itemPrice = item.custom_price !== null && item.custom_price !== undefined ? item.custom_price : item.price
                   return (
                     <tr key={item.id}>
                       <td className="px-3 py-2.5">{item.Product?.name || `Product #${item.product_id}`}</td>
-                      <td className="px-3 py-2.5">{fmt(item.price)}</td>
+                      <td className="px-3 py-2.5">
+                        {item.custom_price !== null && item.custom_price !== undefined ? (
+                          <div>
+                            <span className="text-green-600 font-semibold">{fmt(item.custom_price)}</span>
+                            <span className="text-xs text-gray-400 line-through ml-1.5">{fmt(item.price)}</span>
+                          </div>
+                        ) : (
+                          fmt(item.price)
+                        )}
+                      </td>
                       <td className="px-3 py-2.5">{item.requested_qty}</td>
                       <td className="px-3 py-2.5">
                         <span className={item.approved_qty != null && item.approved_qty < item.requested_qty ? 'text-amber-600 font-medium' : ''}>
                           {item.approved_qty ?? '—'}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 font-medium">{fmt(item.price * qty)}</td>
+                      <td className="px-3 py-2.5 font-medium">{fmt(itemPrice * qty)}</td>
                     </tr>
                   )
                 })}
@@ -447,7 +476,7 @@ export default function AdminOrders() {
             <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden mb-4">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Product', 'Unit Price', 'Requested', 'Approve Qty', 'Subtotal'].map((h) => (
+                  {['Product', 'Unit Price', 'Custom Price', 'Requested', 'Approve Qty', 'Subtotal'].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">{h}</th>
                   ))}
                 </tr>
@@ -460,6 +489,17 @@ export default function AdminOrders() {
                       {item.unit && <span className="ml-1 text-xs text-gray-400">/ {item.unit}</span>}
                     </td>
                     <td className="px-3 py-2.5">{fmt(item.price)}</td>
+                    <td className="px-3 py-2.5">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={item.custom_price}
+                        placeholder="None"
+                        onChange={(e) => updateItemPrice(item.id, e.target.value)}
+                        className="w-24 border border-gray-300 rounded-md px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      />
+                    </td>
                     <td className="px-3 py-2.5 text-gray-500">{item.requested_qty}</td>
                     <td className="px-3 py-2.5">
                       <input
@@ -475,7 +515,7 @@ export default function AdminOrders() {
                       />
                     </td>
                     <td className="px-3 py-2.5 font-medium">
-                      {fmt(item.price * item.approved_qty)}
+                      {fmt((item.custom_price !== '' && !isNaN(parseFloat(item.custom_price)) ? parseFloat(item.custom_price) : item.price) * item.approved_qty)}
                     </td>
                   </tr>
                 ))}

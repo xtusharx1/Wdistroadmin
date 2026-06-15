@@ -41,6 +41,7 @@ export const rejectShop = (id) => http.patch(`/shops/${id}/reject`)
 // ── Products ────────────────────────────────────────────────────────────────
 export const getProducts = (params) => http.get('/products', { params })
 export const createProduct = (data) => http.post('/products', data)
+export const bulkCreateProducts = (data) => http.post('/products/bulk', data)
 export const updateProduct = (id, data) => http.patch(`/products/${id}`, data)
 export const updateStock = (id, stock_quantity) =>
   http.patch(`/products/${id}/stock`, { stock_quantity })

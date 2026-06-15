@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getProducts, createProduct, updateProduct, deleteProduct, uploadImage } from '../../api'
+import { getProducts, createProduct, bulkCreateProducts, updateProduct, deleteProduct, uploadImage } from '../../api'
+import { getUser } from '../../auth'
 import Modal from '../../components/Modal'
+import * as XLSX from 'xlsx'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const input = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
 
-const blankForm = { name: '', sku_id: '', category: 'General', unit: '', price: '', stock_quantity: '', image_url: '' }
+const blankForm = { name: '', sku_id: '', category: 'General', price: '', purchaseCost: '', stock_quantity: '', image_url: '' }
 
 export default function Products() {
+  const user = getUser()
+  const isAdmin = user?.role === 'Admin'
   const [products, setProducts] = useState([])
   const [pagination, setPagination] = useState({ total: 0, page: 1, totalPages: 1 })
   const [search, setSearch] = useState('')
@@ -70,8 +74,8 @@ export default function Products() {
       name: p.name,
       sku_id: p.sku_id || '',
       category: p.category,
-      unit: p.unit,
       price: String(p.price),
+      purchaseCost: p.purchase_cost ? String(p.purchase_cost) : '',
       stock_quantity: String(p.stock_quantity),
       image_url: p.image_url || '',
     })
@@ -101,8 +105,8 @@ export default function Products() {
       name: form.name,
       sku_id: form.sku_id || undefined,
       category: form.category,
-      unit: form.unit,
       price: parseFloat(form.price),
+      purchase_cost: form.purchaseCost ? parseFloat(form.purchaseCost) : null,
       stock_quantity: parseInt(form.stock_quantity, 10),
       image_url: form.image_url || undefined,
     }
@@ -124,6 +128,57 @@ export default function Products() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleBulkImport = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    
+    const reader = new FileReader()
+    reader.onload = async (evt) => {
+      try {
+        const data = evt.target.result
+        const workbook = XLSX.read(data, { type: 'binary' })
+        const sheetName = workbook.SheetNames[0]
+        const sheet = workbook.Sheets[sheetName]
+        const rows = XLSX.utils.sheet_to_json(sheet)
+        
+        const mappedProducts = rows.map((row) => {
+          const findVal = (keys) => {
+            const match = Object.keys(row).find(k => keys.includes(k.trim().toLowerCase()));
+            return match !== undefined ? row[match] : undefined;
+          };
+          
+          const pName = findVal(['product/service name', 'name', 'product name', 'service name']);
+          const pSku = findVal(['sku', 'sku id', 'sku_id']);
+          const pPrice = findVal(['sales price / rate', 'price', 'sales price', 'rate', 'selling price']);
+          const pCost = findVal(['purchase cost', 'purchase_cost', 'cost']);
+          const pQty = findVal(['quantity on hand', 'stock_quantity', 'stock', 'qty', 'quantity']);
+          
+          return {
+            name: pName ? String(pName).trim() : '',
+            sku_id: pSku ? String(pSku).trim() : null,
+            price: pPrice !== undefined ? parseFloat(pPrice) : NaN,
+            purchase_cost: pCost !== undefined ? parseFloat(pCost) : null,
+            stock_quantity: pQty !== undefined ? parseInt(pQty, 10) : 0,
+            category: 'General'
+          };
+        }).filter(p => p.name && !isNaN(p.price));
+        
+        if (mappedProducts.length === 0) {
+          notify('No valid products found in the sheet. Ensure headers match "Product/Service Name" and "Sales Price / Rate".', 'error')
+          return
+        }
+        
+        await bulkCreateProducts(mappedProducts)
+        load(1)
+        notify(`${mappedProducts.length} products imported successfully.`)
+      } catch (err) {
+        notify(err.response?.data?.message || 'Failed to parse or import Excel file.', 'error')
+      }
+    }
+    reader.readAsBinaryString(file)
+    e.target.value = ''
   }
 
   const doDelete = async (p) => {
@@ -156,6 +211,15 @@ export default function Products() {
             onChange={(e) => setSearch(e.target.value)}
             className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48"
           />
+          <label className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer inline-flex items-center">
+            Import Excel/CSV
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleBulkImport}
+              className="hidden"
+            />
+          </label>
           <button
             onClick={openCreate}
             className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
@@ -201,7 +265,7 @@ export default function Products() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  {['S.No', 'Image', 'SKU ID', 'Name', 'Category', 'Unit', 'Price', 'Stock', 'Actions'].map((h) => (
+                  {['S.No', 'Image', 'SKU ID', 'Name', 'Category', ...(isAdmin ? ['Purchase Cost'] : []), 'Price', 'Stock', 'Actions'].map((h) => (
                     <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                       {h}
                     </th>
@@ -224,7 +288,7 @@ export default function Products() {
                       <td className="px-4 py-2.5 text-gray-500 font-mono text-xs">{p.sku_id || '—'}</td>
                       <td className="px-4 py-2.5 font-medium text-gray-900">{p.name}</td>
                       <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{p.unit}</td>
+                      {isAdmin && <td className="px-4 py-2.5 text-gray-500 font-medium">{p.purchase_cost ? fmt(p.purchase_cost) : '—'}</td>}
                       <td className="px-4 py-2.5 font-medium">{fmt(p.price)}</td>
                       <td className="px-4 py-2.5">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${stockColor(p.stock_quantity)}`}>
@@ -319,12 +383,13 @@ export default function Products() {
                 <option value="Tobacco">Tobacco</option>
               </select>
             </Field>
-            <Field label="Unit" required>
+            <Field label="Stock Qty" required>
               <input
-                value={form.unit}
-                onChange={(e) => setForm({ ...form, unit: e.target.value })}
+                type="number"
+                min="0"
+                value={form.stock_quantity}
+                onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })}
                 required
-                placeholder="kg, piece, box…"
                 className={input}
               />
             </Field>
@@ -339,16 +404,18 @@ export default function Products() {
                 className={input}
               />
             </Field>
-            <Field label="Stock Qty" required>
-              <input
-                type="number"
-                min="0"
-                value={form.stock_quantity}
-                onChange={(e) => setForm({ ...form, stock_quantity: e.target.value })}
-                required
-                className={input}
-              />
-            </Field>
+            {isAdmin && (
+              <Field label="Purchase Cost ($)">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.purchaseCost}
+                  onChange={(e) => setForm({ ...form, purchaseCost: e.target.value })}
+                  className={input}
+                />
+              </Field>
+            )}
           </div>
           <Field label="Product Image">
             <input
