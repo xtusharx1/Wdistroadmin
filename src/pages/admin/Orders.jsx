@@ -299,7 +299,7 @@ export default function AdminOrders() {
                         {ns === 'approved' ? 'Approve' : ns === 'dispatched' ? 'Dispatch' : 'Mark Delivered'}
                       </button>
                     ))}
-                    {(o.status === 'dispatched' || o.status === 'delivered') && (
+                    {(o.status === 'approved' || o.status === 'dispatched' || o.status === 'delivered') && (
                       <button
                         onClick={() => setDetail(o)}
                         className="text-xs px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium transition-colors"
