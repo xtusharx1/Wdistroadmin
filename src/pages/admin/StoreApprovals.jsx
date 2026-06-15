@@ -135,22 +135,16 @@ export default function StoreApprovals() {
 
   const [licenseFor, setLicenseFor] = useState(null)
   const [licForm, setLicForm] = useState({
-    seller_permit_active: true,
-    tobacco_license_active: false,
-    tobacco_license_number: '',
-    tobacco_license_expiry: '',
-    tobacco_license_document: ''
+    seller_permit: '',
+    tobacco_license: ''
   })
   const [savingLic, setSavingLic] = useState(false)
 
   const openLicenseModal = (store) => {
     setLicenseFor(store)
     setLicForm({
-      seller_permit_active: !!store.seller_permit_active,
-      tobacco_license_active: !!store.tobacco_license_active,
-      tobacco_license_number: store.tobacco_license_number || '',
-      tobacco_license_expiry: store.tobacco_license_expiry ? store.tobacco_license_expiry.split('T')[0] : '',
-      tobacco_license_document: store.tobacco_license_document || ''
+      seller_permit: store.seller_permit || '',
+      tobacco_license: store.tobacco_license || ''
     })
   }
 
@@ -159,11 +153,8 @@ export default function StoreApprovals() {
     setSavingLic(true)
     try {
       const payload = {
-        seller_permit_active: licForm.seller_permit_active,
-        tobacco_license_active: licForm.tobacco_license_active,
-        tobacco_license_number: licForm.tobacco_license_number || null,
-        tobacco_license_expiry: licForm.tobacco_license_expiry || null,
-        tobacco_license_document: licForm.tobacco_license_document || null
+        seller_permit: licForm.seller_permit,
+        tobacco_license: licForm.tobacco_license || null
       }
       const res = await updateShop(licenseFor.id, payload)
       const updatedStore = res.data.data.shop
@@ -240,9 +231,9 @@ export default function StoreApprovals() {
                 <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">
                   <div>{s.shop_name}</div>
-                  {s.tobacco_license_number && (
+                  {s.tobacco_license && (
                     <span className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mt-1 inline-block">
-                      Tobacco Lic: {s.tobacco_license_number}
+                      Tobacco Lic: {s.tobacco_license}
                     </span>
                   )}
                 </td>
@@ -467,71 +458,28 @@ export default function StoreApprovals() {
       {/* Licenses Modal */}
       <Modal open={!!licenseFor} onClose={() => setLicenseFor(null)} title={`Manage Licenses — ${licenseFor?.shop_name}`}>
         <form onSubmit={handleLicenseSubmit} className="space-y-4">
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md border border-gray-200">
-            <div>
-              <span className="block text-sm font-semibold text-gray-800">Seller Permit</span>
-              <span className="text-xs text-gray-500">Permit Number: {licenseFor?.seller_permit}</span>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={licForm.seller_permit_active}
-                onChange={(e) => setLicForm({ ...licForm, seller_permit_active: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Seller Permit</label>
+            <input
+              type="text"
+              value={licForm.seller_permit}
+              onChange={(e) => setLicForm({ ...licForm, seller_permit: e.target.value })}
+              required
+              placeholder="e.g. SL-12345"
+              className={inputClass}
+            />
           </div>
 
-          <div className="flex items-center justify-between p-3 bg-gray-50 rounded-md border border-gray-200">
-            <div>
-              <span className="block text-sm font-semibold text-gray-800">Tobacco License</span>
-              <span className="text-xs text-gray-500">Enable access to Tobacco & Vape categories</span>
-            </div>
-            <label className="relative inline-flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={licForm.tobacco_license_active}
-                onChange={(e) => setLicForm({ ...licForm, tobacco_license_active: e.target.checked })}
-                className="sr-only peer"
-              />
-              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
-            </label>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-1">Tobacco License</label>
+            <input
+              type="text"
+              value={licForm.tobacco_license}
+              onChange={(e) => setLicForm({ ...licForm, tobacco_license: e.target.value })}
+              placeholder="e.g. TOB-99234 (Optional)"
+              className={inputClass}
+            />
           </div>
-
-          {licForm.tobacco_license_active && (
-            <div className="space-y-3 p-3 bg-purple-50/50 border border-purple-100 rounded-md">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Tobacco License Number</label>
-                <input
-                  type="text"
-                  value={licForm.tobacco_license_number}
-                  onChange={(e) => setLicForm({ ...licForm, tobacco_license_number: e.target.value })}
-                  placeholder="e.g. TOB-99234"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">License Expiry Date</label>
-                <input
-                  type="date"
-                  value={licForm.tobacco_license_expiry}
-                  onChange={(e) => setLicForm({ ...licForm, tobacco_license_expiry: e.target.value })}
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">License Document Link / Path</label>
-                <input
-                  type="text"
-                  value={licForm.tobacco_license_document}
-                  onChange={(e) => setLicForm({ ...licForm, tobacco_license_document: e.target.value })}
-                  placeholder="e.g. S3 Upload Link"
-                  className={inputClass}
-                />
-              </div>
-            </div>
-          )}
 
           <div className="flex gap-3 pt-2">
             <button
