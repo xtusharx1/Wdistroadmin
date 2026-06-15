@@ -19,7 +19,7 @@ export default function Login() {
       const user = res.data.data.user
       setUser(user)
       if (user.role === 'Admin') navigate('/admin/dashboard')
-      else if (user.role === 'Sales Executive') navigate('/sales/shops')
+      else if (user.role === 'Sales Executive') navigate('/sales/stores')
       else setError('Your role does not have web access.')
     } catch (err) {
       setError(err.response?.data?.message || 'Login failed. Please try again.')

@@ -21,8 +21,8 @@ export default function SalesPerformance() {
   const totalSales = performance.reduce((sum, item) => sum + (item.order?.total_amount || 0), 0)
   const totalOrders = performance.length
   
-  // Find unique shops
-  const uniqueShops = new Set(performance.map(p => p.shop?.id)).size
+  // Find unique stores
+  const uniqueStores = new Set(performance.map(p => p.shop?.id)).size
 
   if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
 
@@ -31,7 +31,7 @@ export default function SalesPerformance() {
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-900">My Sales Performance</h2>
         <p className="text-sm text-gray-500 mt-0.5">
-          Overview of your sales volume and orders driven across all assigned shops
+          Overview of your sales volume and orders driven across all assigned stores
         </p>
       </div>
 
@@ -46,8 +46,8 @@ export default function SalesPerformance() {
           <span className="text-2xl font-bold text-gray-900 mt-2">{totalOrders}</span>
         </div>
         <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm flex flex-col justify-between">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Shops Handled</span>
-          <span className="text-2xl font-bold text-gray-900 mt-2">{uniqueShops}</span>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Stores Handled</span>
+          <span className="text-2xl font-bold text-gray-900 mt-2">{uniqueStores}</span>
         </div>
       </div>
 
@@ -55,13 +55,13 @@ export default function SalesPerformance() {
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
           <h3 className="font-semibold text-gray-800 text-sm">Order Log</h3>
-          <span className="text-xs text-gray-500 font-medium">Includes past and active shop orders</span>
+          <span className="text-xs text-gray-500 font-medium">Includes past and active store orders</span>
         </div>
         
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['Order ID', 'Shop Name', 'Order Date', 'Status', 'Order Amount'].map((h) => (
+              {['Order ID', 'Store Name', 'Order Date', 'Status', 'Order Amount'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
                   {h}
                 </th>
@@ -72,7 +72,7 @@ export default function SalesPerformance() {
             {performance.map((record) => (
               <tr key={record.order?.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3.5 font-medium text-gray-900">WS-{record.order?.id}</td>
-                <td className="px-4 py-3.5 text-gray-700">{record.shop?.shop_name || `Shop #${record.shop?.id}`}</td>
+                <td className="px-4 py-3.5 text-gray-700">{record.shop?.shop_name || `Store #${record.shop?.id}`}</td>
                 <td className="px-4 py-3.5 text-gray-500">{fmtDate(record.order?.created_at)}</td>
                 <td className="px-4 py-3.5">
                   <StatusBadge status={record.order?.status} />

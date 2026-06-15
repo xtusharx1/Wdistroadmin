@@ -4,7 +4,7 @@ import { getUser, clearUser } from '../auth'
 const NAV = {
   Admin: [
     { label: 'Dashboard', path: '/admin/dashboard' },
-    { label: 'Shops', path: '/admin/shops' },
+    { label: 'Stores', path: '/admin/stores' },
     { label: 'Users', path: '/admin/users' },
     { label: 'Assignments', path: '/admin/assignments' },
     { label: 'Products', path: '/admin/products' },
@@ -15,7 +15,7 @@ const NAV = {
   ],
   'Sales Executive': [
     { label: 'Dashboard', path: '/sales/dashboard' },
-    { label: 'Assigned Shops', path: '/sales/shops' },
+    { label: 'Assigned Stores', path: '/sales/stores' },
     { label: 'Orders', path: '/sales/orders' },
     { label: 'My Performance', path: '/sales/performance' },
   ],

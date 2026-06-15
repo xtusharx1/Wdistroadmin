@@ -32,11 +32,13 @@ export const getUsers = () => http.get('/users')
 export const createUser = (data) => http.post('/users', data)
 export const activateUser = (id) => http.patch(`/users/${id}/approve`)
 export const deactivateUser = (id) => http.patch(`/users/${id}/reject`)
+export const updateUser = (id, data) => http.patch(`/users/${id}`, data)
 
 // ── Shops ───────────────────────────────────────────────────────────────────
 export const getShops = () => http.get('/shops')
 export const approveShop = (id) => http.patch(`/shops/${id}/approve`)
 export const rejectShop = (id) => http.patch(`/shops/${id}/reject`)
+export const updateShop = (id, data) => http.patch(`/shops/${id}`, data)
 
 // ── Products ────────────────────────────────────────────────────────────────
 export const getProducts = (params) => http.get('/products', { params })
@@ -68,4 +70,5 @@ export const getSalesAssignments = () => http.get('/sales/shops')
 export const getAssignments = () => http.get('/sales/assignments')
 export const createAssignment = (data) => http.post('/sales/assignments', data)
 export const endAssignment = (id, data) => http.patch(`/sales/assignments/${id}`, data)
+export const updateAssignment = (id, data) => http.patch(`/sales/assignments/${id}`, data)
 export const getIncentives = (params) => http.get('/sales/incentives', { params })

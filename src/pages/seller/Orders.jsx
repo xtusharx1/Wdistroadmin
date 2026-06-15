@@ -192,7 +192,7 @@ export default function SellerOrders() {
     0
   ) ?? 0
 
-  const shopMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
+  const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
 
   if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
 
@@ -242,7 +242,7 @@ export default function SellerOrders() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['Order ID', 'Shop', 'Items', 'Total', 'Status', 'Date', 'Actions'].map((h) => (
+              {['Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                   {h}
                 </th>
@@ -260,7 +260,7 @@ export default function SellerOrders() {
                     WS-{o.id}
                   </button>
                 </td>
-                <td className="px-4 py-3 text-gray-500">{shopMap[o.shop_id] || `Shop #${o.shop_id}`}</td>
+                <td className="px-4 py-3 text-gray-500">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
                 <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
                 <td className="px-4 py-3 font-medium">{fmt(o.total_amount)}</td>
                 <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
@@ -318,7 +318,7 @@ export default function SellerOrders() {
           <div>
             <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
               {[
-                ['Shop', shopMap[detailModal.shop_id] || `Shop #${detailModal.shop_id}`],
+                ['Store', storeMap[detailModal.shop_id] || `Store #${detailModal.shop_id}`],
                 ['Status', null],
                 ['Placed', fmtDate(detailModal.created_at)],
                 ['Total', fmt(detailModal.total_amount)],

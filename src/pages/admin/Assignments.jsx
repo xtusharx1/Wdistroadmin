@@ -1,19 +1,23 @@
 import { useState, useEffect } from 'react'
-import { getAssignments, getUsers, getShops, createAssignment, endAssignment } from '../../api'
+import { getAssignments, getUsers, getShops, createAssignment, endAssignment, updateAssignment } from '../../api'
 import Modal from '../../components/Modal'
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
 const today = () => new Date().toISOString().split('T')[0]
 
-const BLANK_FORM = { sales_exec_id: '', shop_id: '', start_date: today() }
+const BLANK_FORM = { sales_exec_id: '', shop_id: '', start_date: today(), end_date: '' }
 
 export default function Assignments() {
   const [assignments, setAssignments] = useState([])
   const [execs, setExecs] = useState([])
-  const [shops, setShops] = useState([])
+  const [stores, setStores] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('Active')
   const [createModal, setCreateModal] = useState(false)
+  
+  // Edit mode state
+  const [editAssignment, setEditAssignment] = useState(null)
+  
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
   const [ending, setEnding] = useState(null)
@@ -29,39 +33,59 @@ export default function Assignments() {
       ([aRes, uRes, sRes]) => {
         setAssignments(aRes.data.data.assignments || [])
         setExecs((uRes.data.data.users || []).filter((u) => u.role === 'Sales Executive'))
-        setShops(sRes.data.data.shops || [])
+        setStores(sRes.data.data.shops || [])
       }
     ).finally(() => setLoading(false))
 
   useEffect(() => { load() }, [])
 
   const openCreate = () => {
+    setEditAssignment(null)
     setForm(BLANK_FORM)
     setCreateModal(true)
   }
 
-  const submitCreate = async (e) => {
+  const openEdit = (a) => {
+    setEditAssignment(a)
+    setForm({
+      sales_exec_id: String(a.sales_exec_id),
+      shop_id: String(a.shop_id),
+      start_date: a.start_date ? a.start_date.split('T')[0] : today(),
+      end_date: a.end_date ? a.end_date.split('T')[0] : ''
+    })
+    setCreateModal(true)
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.sales_exec_id || !form.shop_id || !form.start_date) return
     setSaving(true)
     try {
-      await createAssignment({
+      const payload = {
         sales_exec_id: Number(form.sales_exec_id),
         shop_id: Number(form.shop_id),
         start_date: form.start_date,
-      })
-      notify('Assignment created.')
+        end_date: form.end_date || null
+      }
+      
+      if (editAssignment) {
+        await updateAssignment(editAssignment.id, payload)
+        notify('Assignment updated successfully.')
+      } else {
+        await createAssignment(payload)
+        notify('Assignment created.')
+      }
       setCreateModal(false)
       load()
     } catch (err) {
-      notify(err.response?.data?.message || 'Failed to create assignment.', 'error')
+      notify(err.response?.data?.message || 'Action failed.', 'error')
     } finally {
       setSaving(false)
     }
   }
 
   const doEnd = async (a) => {
-    if (!confirm(`End assignment for ${a.SalesExecutive?.name || `Exec #${a.sales_exec_id}`} → ${a.Shop?.shop_name || `Shop #${a.shop_id}`}?`)) return
+    if (!confirm(`End assignment for ${a.SalesExecutive?.name || `Exec #${a.sales_exec_id}`} → ${a.Shop?.shop_name || `Store #${a.shop_id}`}?`)) return
     setEnding(a.id)
     try {
       await endAssignment(a.id, { end_date: today() })
@@ -98,7 +122,7 @@ export default function Assignments() {
           onClick={openCreate}
           className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
         >
-          + Assign Shop
+          + Assign Store
         </button>
       </div>
 
@@ -134,7 +158,7 @@ export default function Assignments() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['S.No', 'Sales Executive', 'Assigned Shop', 'Start Date', 'End Date', 'Status', 'Action'].map((h) => (
+              {['S.No', 'Sales Executive', 'Assigned Store', 'Start Date', 'End Date', 'Status', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                   {h}
                 </th>
@@ -156,7 +180,7 @@ export default function Assignments() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <p className="text-gray-700">{a.Shop?.shop_name || `Shop #${a.shop_id}`}</p>
+                    <p className="text-gray-700">{a.Shop?.shop_name || `Store #${a.shop_id}`}</p>
                     {(a.Shop?.city || a.Shop?.state) && (
                       <p className="text-xs text-gray-400 mt-0.5">
                         {[a.Shop.city, a.Shop.state].filter(Boolean).join(', ')}
@@ -175,15 +199,23 @@ export default function Assignments() {
                     </span>
                   </td>
                   <td className="px-4 py-3">
-                    {isActive && (
+                    <div className="flex gap-2">
                       <button
-                        onClick={() => doEnd(a)}
-                        disabled={ending === a.id}
-                        className="text-xs px-2.5 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                        onClick={() => openEdit(a)}
+                        className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors"
                       >
-                        {ending === a.id ? 'Ending…' : 'End'}
+                        Edit
                       </button>
-                    )}
+                      {isActive && (
+                        <button
+                          onClick={() => doEnd(a)}
+                          disabled={ending === a.id}
+                          className="text-xs px-2.5 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                        >
+                          {ending === a.id ? 'Ending…' : 'End'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               )
@@ -195,9 +227,9 @@ export default function Assignments() {
         )}
       </div>
 
-      {/* Create Assignment Modal */}
-      <Modal open={createModal} onClose={() => setCreateModal(false)} title="Assign Shop to Sales Executive" size="md">
-        <form onSubmit={submitCreate} className="space-y-4">
+      {/* Create / Edit Assignment Modal */}
+      <Modal open={createModal} onClose={() => setCreateModal(false)} title={editAssignment ? 'Edit Store Assignment' : 'Assign Store to Sales Executive'} size="md">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Sales Executive</label>
             <select
@@ -219,15 +251,15 @@ export default function Assignments() {
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Shop</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Store</label>
             <select
               required
               value={form.shop_id}
               onChange={(e) => setForm((f) => ({ ...f, shop_id: e.target.value }))}
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
             >
-              <option value="">Select Shop…</option>
-              {shops.map((s) => (
+              <option value="">Select Store…</option>
+              {stores.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.shop_name} {s.city ? `— ${s.city}` : ''}
                 </option>
@@ -246,13 +278,25 @@ export default function Assignments() {
             />
           </div>
 
+          {editAssignment && (
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">End Date (Optional)</label>
+              <input
+                type="date"
+                value={form.end_date}
+                onChange={(e) => setForm((f) => ({ ...f, end_date: e.target.value }))}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+            </div>
+          )}
+
           <div className="flex gap-3 pt-2">
             <button
               type="submit"
               disabled={saving}
               className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium py-2 rounded-md transition-colors"
             >
-              {saving ? 'Saving…' : 'Create Assignment'}
+              {saving ? 'Saving…' : (editAssignment ? 'Save Changes' : 'Create Assignment')}
             </button>
             <button
               type="button"

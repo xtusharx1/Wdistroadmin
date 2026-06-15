@@ -8,7 +8,7 @@ const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
 const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
 
-export default function AssignedShops() {
+export default function AssignedStores() {
   const me = getUser()
   const [assignments, setAssignments] = useState([])
   const [orders, setOrders] = useState([])
@@ -16,7 +16,7 @@ export default function AssignedShops() {
   const [filter, setFilter] = useState('Active')
 
   // Modals state
-  const [selectedShop, setSelectedShop] = useState(null)
+  const [selectedStore, setSelectedStore] = useState(null)
   const [activeTab, setActiveTab] = useState('details') // 'details' | 'orders' | 'invoices'
   
   const [orderDetail, setOrderDetail] = useState(null)
@@ -73,7 +73,6 @@ export default function AssignedShops() {
       const res = await generateInvoice(orderDetail.id, charges)
       setInvoice(res.data.data.invoice)
       alert('Invoice generated successfully!')
-      // Refresh orders list to fetch updated invoice state
       fetchData()
     } catch (err) {
       alert(err.response?.data?.message || 'Failed to generate invoice.')
@@ -114,8 +113,6 @@ export default function AssignedShops() {
     try {
       await updateOrderStatus(order.id, status)
       alert(`Order status updated to ${status}.`)
-      
-      // Update local orderDetail status
       setOrderDetail(prev => prev && prev.id === order.id ? { ...prev, status } : prev)
       fetchData()
     } catch (err) {
@@ -159,7 +156,6 @@ export default function AssignedShops() {
       )
       alert('Order approved and processed successfully.')
       setProcessModal(null)
-      // Close details and refresh
       setOrderDetail(null)
       fetchData()
     } catch (err) {
@@ -182,7 +178,7 @@ export default function AssignedShops() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Assigned Shops</h2>
+          <h2 className="text-lg font-semibold text-gray-900">Assigned Stores</h2>
           <p className="text-sm text-gray-500 mt-0.5">
             {assignments.filter((a) => !a.end_date).length} active assignment
             {assignments.filter((a) => !a.end_date).length !== 1 ? 's' : ''}
@@ -208,7 +204,7 @@ export default function AssignedShops() {
 
       {visible.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 py-16 text-center">
-          <p className="text-gray-400 text-sm">No assigned shops in this category</p>
+          <p className="text-gray-400 text-sm">No assigned stores in this category</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -225,7 +221,7 @@ export default function AssignedShops() {
                 <div className="flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold text-gray-900 text-sm">
-                      {shop.shop_name || `Shop #${a.shop_id}`}
+                      {shop.shop_name || `Store #${a.shop_id}`}
                     </h3>
                     <p className="text-xs text-gray-500 mt-0.5">{shop.owner_name || '—'}</p>
                   </div>
@@ -261,12 +257,12 @@ export default function AssignedShops() {
 
                 <button
                   onClick={() => {
-                    setSelectedShop(shop)
+                    setSelectedStore(shop)
                     setActiveTab('details')
                   }}
                   className="mt-4 w-full py-1.5 border border-indigo-600 text-indigo-600 hover:bg-indigo-50 font-medium text-xs rounded transition-colors"
                 >
-                  View Shop Details
+                  View Store Details
                 </button>
               </div>
             )
@@ -274,14 +270,14 @@ export default function AssignedShops() {
         </div>
       )}
 
-      {/* Shop Details Modal */}
+      {/* Store Details Modal */}
       <Modal
-        open={!!selectedShop}
-        onClose={() => setSelectedShop(null)}
-        title={selectedShop?.shop_name || 'Shop Details'}
+        open={!!selectedStore}
+        onClose={() => setSelectedStore(null)}
+        title={selectedStore?.shop_name || 'Store Details'}
         size="lg"
       >
-        {selectedShop && (
+        {selectedStore && (
           <div>
             {/* Tabs */}
             <div className="flex border-b border-gray-200 mb-5">
@@ -304,25 +300,25 @@ export default function AssignedShops() {
             {activeTab === 'details' && (
               <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
                 <div className="p-3 bg-gray-50 rounded-lg">
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Shop Name</p>
-                  <p className="font-semibold mt-1">{selectedShop.shop_name}</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Store Name</p>
+                  <p className="font-semibold mt-1">{selectedStore.shop_name}</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Owner Name</p>
-                  <p className="font-semibold mt-1">{selectedShop.owner_name}</p>
+                  <p className="font-semibold mt-1">{selectedStore.owner_name}</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Phone Number</p>
-                  <p className="mt-1">{selectedShop.contact_details || '—'}</p>
+                  <p className="mt-1">{selectedStore.contact_details || '—'}</p>
                 </div>
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Seller Permit</p>
-                  <p className="font-mono mt-1">{selectedShop.seller_permit || '—'}</p>
+                  <p className="font-mono mt-1">{selectedStore.seller_permit || '—'}</p>
                 </div>
                 <div className="col-span-2 p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Address</p>
                   <p className="mt-1">
-                    {[selectedShop.address, selectedShop.city, selectedShop.state, selectedShop.zip]
+                    {[selectedStore.address, selectedStore.city, selectedStore.state, selectedStore.zip]
                       .filter(Boolean)
                       .join(', ') || '—'}
                   </p>
@@ -344,7 +340,7 @@ export default function AssignedShops() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {orders
-                      .filter((o) => o.shop_id === selectedShop.id)
+                      .filter((o) => o.shop_id === selectedStore.id)
                       .map((o) => (
                         <tr key={o.id} className="hover:bg-gray-50">
                           <td className="px-4 py-2.5 font-medium text-indigo-600">WS-{o.id}</td>
@@ -363,9 +359,9 @@ export default function AssignedShops() {
                           </td>
                         </tr>
                       ))}
-                    {orders.filter((o) => o.shop_id === selectedShop.id).length === 0 && (
+                    {orders.filter((o) => o.shop_id === selectedStore.id).length === 0 && (
                       <tr>
-                        <td colSpan="5" className="text-center text-gray-400 py-10">No orders for this shop yet.</td>
+                        <td colSpan="5" className="text-center text-gray-400 py-10">No orders for this store yet.</td>
                       </tr>
                     )}
                   </tbody>
@@ -387,7 +383,7 @@ export default function AssignedShops() {
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {orders
-                      .filter((o) => o.shop_id === selectedShop.id && o.Invoice)
+                      .filter((o) => o.shop_id === selectedStore.id && o.Invoice)
                       .map((o) => {
                         const inv = o.Invoice
                         return (
@@ -422,9 +418,9 @@ export default function AssignedShops() {
                           </tr>
                         )
                       })}
-                    {orders.filter((o) => o.shop_id === selectedShop.id && o.Invoice).length === 0 && (
+                    {orders.filter((o) => o.shop_id === selectedStore.id && o.Invoice).length === 0 && (
                       <tr>
-                        <td colSpan="5" className="text-center text-gray-400 py-10">No invoices generated for this shop yet.</td>
+                        <td colSpan="5" className="text-center text-gray-400 py-10">No invoices generated for this store yet.</td>
                       </tr>
                     )}
                   </tbody>
@@ -441,8 +437,8 @@ export default function AssignedShops() {
           <div>
             <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-wide">Shop</p>
-                <p className="font-medium">{selectedShop?.shop_name || `Shop #${orderDetail.shop_id}`}</p>
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Store</p>
+                <p className="font-medium">{selectedStore?.shop_name || `Store #${orderDetail.shop_id}`}</p>
               </div>
               <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Status</p>
@@ -576,17 +572,28 @@ export default function AssignedShops() {
               <tbody className="divide-y divide-gray-100">
                 {(orderDetail.OrderItems || []).map((item) => {
                   const qty = item.approved_qty ?? item.requested_qty
+                  const itemPrice = item.custom_price !== null && item.custom_price !== undefined ? item.custom_price : item.price
+                  const isCustom = item.custom_price !== null && item.custom_price !== undefined
                   return (
                     <tr key={item.id}>
                       <td className="px-3 py-2.5">{item.Product?.name || `Product #${item.product_id}`}</td>
-                      <td className="px-3 py-2.5">{fmt(item.price)}</td>
+                      <td className="px-3 py-2.5">
+                        {isCustom ? (
+                          <div className="flex flex-col">
+                            <span className="text-green-600 font-semibold">{fmt(itemPrice)}</span>
+                            <span className="text-xs text-gray-400 line-through">{fmt(item.price)}</span>
+                          </div>
+                        ) : (
+                          fmt(item.price)
+                        )}
+                      </td>
                       <td className="px-3 py-2.5">{item.requested_qty}</td>
                       <td className="px-3 py-2.5">
                         <span className={item.approved_qty != null && item.approved_qty < item.requested_qty ? 'text-amber-600 font-medium' : ''}>
                           {item.approved_qty ?? '—'}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 font-medium">{fmt(item.price * qty)}</td>
+                      <td className="px-3 py-2.5 font-medium">{fmt(itemPrice * qty)}</td>
                     </tr>
                   )
                 })}
@@ -623,7 +630,6 @@ export default function AssignedShops() {
                   <tr key={item.id}>
                     <td className="px-3 py-2.5 font-medium">
                       {item.name}
-                      {item.unit && <span className="ml-1 text-xs text-gray-400">/ {item.unit}</span>}
                     </td>
                     <td className="px-3 py-2.5">{fmt(item.price)}</td>
                     <td className="px-3 py-2.5 text-gray-500">{item.requested_qty}</td>

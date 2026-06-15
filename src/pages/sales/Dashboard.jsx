@@ -7,7 +7,7 @@ const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 
 export default function SalesDashboard() {
   const me = getUser()
-  const [assignedShopsCount, setAssignedShopsCount] = useState(0)
+  const [assignedStoresCount, setAssignedStoresCount] = useState(0)
   const [stats, setStats] = useState({
     ordersToday: 0,
     ordersThisMonth: 0,
@@ -26,7 +26,7 @@ export default function SalesDashboard() {
         
         // Active assigned shops
         const activeAssignments = myAssignments.filter((a) => !a.end_date)
-        setAssignedShopsCount(activeAssignments.length)
+        setAssignedStoresCount(activeAssignments.length)
         
         const shopIds = new Set(myAssignments.map((a) => a.shop_id))
         const allOrders = oRes.data.data.orders || []
@@ -92,11 +92,11 @@ export default function SalesDashboard() {
     <div className="p-6">
       <div className="mb-6">
         <h2 className="text-xl font-bold text-gray-900">Dashboard</h2>
-        <p className="text-sm text-gray-500">Sales Executive overview for your assigned shops.</p>
+        <p className="text-sm text-gray-500">Sales Executive overview for your assigned stores.</p>
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-        <StatCard label="Assigned Shops" value={assignedShopsCount} color="indigo" />
+        <StatCard label="Assigned Stores" value={assignedStoresCount} color="indigo" />
         <StatCard label="Orders Today" value={stats.ordersToday} color="blue" />
         <StatCard label="Orders This Month" value={stats.ordersThisMonth} color="blue" />
         <StatCard label="Delivered Orders" value={stats.deliveredOrders} color="green" />

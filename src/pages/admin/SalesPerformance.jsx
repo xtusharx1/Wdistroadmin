@@ -126,7 +126,7 @@ export default function AdminSalesPerformance() {
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                     <tr>
-                      {['Order ID', 'Shop Name', 'Date', 'Status', 'Order Amount'].map((h) => (
+                      {['Order ID', 'Store Name', 'Date', 'Status', 'Order Amount'].map((h) => (
                         <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
                           {h}
                         </th>
@@ -137,7 +137,7 @@ export default function AdminSalesPerformance() {
                     {selectedStats.orders.map((record) => (
                       <tr key={record.order?.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 font-medium text-gray-900">WS-{record.order?.id}</td>
-                        <td className="px-6 py-4 text-gray-700">{record.shop?.shop_name || `Shop #${record.shop?.id}`}</td>
+                        <td className="px-6 py-4 text-gray-700">{record.shop?.shop_name || `Store #${record.shop?.id}`}</td>
                         <td className="px-6 py-4 text-gray-500">{fmtDate(record.order?.created_at)}</td>
                         <td className="px-6 py-4">
                           <StatusBadge status={record.order?.status} />

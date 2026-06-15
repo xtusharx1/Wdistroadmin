@@ -18,7 +18,7 @@ const NEXT_STATUS = {
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState([])
-  const [shopMap, setShopMap] = useState({})
+  const [storeMap, setStoreMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
@@ -38,8 +38,8 @@ export default function AdminOrders() {
   useEffect(() => {
     Promise.all([getOrders(), getShops()]).then(([oRes, sRes]) => {
       setOrders(oRes.data.data.orders || [])
-      const shops = sRes.data.data.shops || []
-      setShopMap(shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {}))
+      const stores = sRes.data.data.shops || []
+      setStoreMap(stores.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {}))
     }).finally(() => setLoading(false))
   }, [])
 
@@ -252,7 +252,7 @@ export default function AdminOrders() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['S.No', 'Order ID', 'Shop', 'Items', 'Total', 'Status', 'Date', 'Actions'].map((h) => (
+              {['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Actions'].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                   {h}
                 </th>
@@ -272,7 +272,7 @@ export default function AdminOrders() {
                   </button>
                 </td>
                 <td className="px-4 py-3 text-gray-700">
-                  {shopMap[o.shop_id] || `Shop #${o.shop_id}`}
+                  {storeMap[o.shop_id] || `Store #${o.shop_id}`}
                 </td>
                 <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
                 <td className="px-4 py-3 font-medium">{fmt(o.total_amount)}</td>
@@ -324,8 +324,8 @@ export default function AdminOrders() {
           <div>
             <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
               <div>
-                <p className="text-gray-400 text-xs uppercase tracking-wide">Shop</p>
-                <p className="font-medium">{shopMap[detail.shop_id] || `Shop #${detail.shop_id}`}</p>
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Store</p>
+                <p className="font-medium">{storeMap[detail.shop_id] || `Store #${detail.shop_id}`}</p>
               </div>
               <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Status</p>

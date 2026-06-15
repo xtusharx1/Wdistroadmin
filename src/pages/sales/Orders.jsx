@@ -13,8 +13,8 @@ const FILTERS = ['All', 'pending', 'approved', 'dispatched', 'delivered']
 export default function SalesOrders() {
   const me = getUser()
   const [orders, setOrders] = useState([])
-  const [shopMap, setShopMap] = useState({})
-  const [assignedShopIds, setAssignedShopIds] = useState(new Set())
+  const [storeMap, setStoreMap] = useState({})
+  const [assignedStoreIds, setAssignedStoreIds] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
   
@@ -31,17 +31,17 @@ export default function SalesOrders() {
     Promise.all([getSalesAssignments(), getOrders()]).then(([aRes, oRes]) => {
       const allAssignments = aRes.data.data.assignments || []
       const myAssignments = allAssignments.filter((a) => a.sales_exec_id === me?.id)
-      const shopIds = new Set(myAssignments.map((a) => a.shop_id))
-      setAssignedShopIds(shopIds)
+      const storeIds = new Set(myAssignments.map((a) => a.shop_id))
+      setAssignedStoreIds(storeIds)
 
-      const shopNameMap = myAssignments.reduce((m, a) => {
+      const storeNameMap = myAssignments.reduce((m, a) => {
         if (a.Shop) m[a.shop_id] = a.Shop.shop_name
         return m
       }, {})
-      setShopMap(shopNameMap)
+      setStoreMap(storeNameMap)
 
       const allOrders = oRes.data.data.orders || []
-      setOrders(allOrders.filter((o) => shopIds.has(o.shop_id)))
+      setOrders(allOrders.filter((o) => storeIds.has(o.shop_id)))
     }).finally(() => setLoading(false))
   }
 
@@ -192,12 +192,12 @@ export default function SalesOrders() {
 
   if (loading && orders.length === 0) return <div className="p-6 text-sm text-gray-400">Loading…</div>
 
-  if (assignedShopIds.size === 0) {
+  if (assignedStoreIds.size === 0) {
     return (
       <div className="p-6">
         <h2 className="text-lg font-semibold text-gray-900 mb-4">Orders</h2>
         <div className="bg-white rounded-lg border border-gray-200 py-16 text-center">
-          <p className="text-gray-400 text-sm">No shops assigned to you yet.</p>
+          <p className="text-gray-400 text-sm">No stores assigned to you yet.</p>
         </div>
       </div>
     )
@@ -209,7 +209,7 @@ export default function SalesOrders() {
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Orders</h2>
           <p className="text-sm text-gray-500 mt-0.5">
-            From your {assignedShopIds.size} assigned shop{assignedShopIds.size !== 1 ? 's' : ''}
+            From your {assignedStoreIds.size} assigned store{assignedStoreIds.size !== 1 ? 's' : ''}
           </p>
         </div>
       </div>
@@ -234,7 +234,7 @@ export default function SalesOrders() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['Order ID', 'Shop', 'Items', 'Total', 'Status', 'Date', 'Detail'].map((h) => (
+              {['Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Detail'].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                   {h}
                 </th>
@@ -246,7 +246,7 @@ export default function SalesOrders() {
               <tr key={o.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 font-medium text-gray-900">WS-{o.id}</td>
                 <td className="px-4 py-3 text-gray-700">
-                  {shopMap[o.shop_id] || `Shop #${o.shop_id}`}
+                  {storeMap[o.shop_id] || `Store #${o.shop_id}`}
                 </td>
                 <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
                 <td className="px-4 py-3 font-medium">{fmt(o.total_amount)}</td>
@@ -275,8 +275,8 @@ export default function SalesOrders() {
           <div>
             <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
               <div>
-                <p className="text-xs text-gray-400 uppercase tracking-wide">Shop</p>
-                <p className="font-medium mt-0.5">{shopMap[detail.shop_id] || `Shop #${detail.shop_id}`}</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wide">Store</p>
+                <p className="font-medium mt-0.5">{storeMap[detail.shop_id] || `Store #${detail.shop_id}`}</p>
               </div>
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-wide">Status</p>

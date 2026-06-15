@@ -7,7 +7,20 @@ import * as XLSX from 'xlsx'
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const input = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
 
-const blankForm = { name: '', sku_id: '', category: 'General', price: '', purchaseCost: '', stock_quantity: '', image_url: '' }
+const CATEGORY_MAP = {
+  'General Merchandise': ['Cables', 'Toys', 'Misc', 'Clothing'],
+  'Glass': ['Glass Rigs', 'Glass Accessories', 'Grinders'],
+  'Tobacco': ['Wraps', 'Cigars', 'Cigarillos'],
+  'Torch Lighters': ['Pocket Torches', 'High Flame', 'Butane'],
+  'Vape': ['Disposable', 'Hardware', 'Vape Accessories', 'Juices'],
+  'Rolling Papers': ['Papers', 'Rolling Machine', 'Tips', 'Cones']
+}
+
+const getRequiredLicense = (mainCat) => {
+  return (mainCat === 'Tobacco' || mainCat === 'Vape') ? 'Tobacco License' : 'Seller Permit'
+}
+
+const blankForm = { name: '', sku_id: '', mainCategory: 'General Merchandise', subCategory: 'Cables', price: '', purchaseCost: '', stock_quantity: '', image_url: '' }
 
 export default function Products() {
   const user = getUser()
@@ -59,7 +72,7 @@ export default function Products() {
 
   const visible = products.filter((p) => {
     if (categoryFilter === 'All') return true
-    return p.category === categoryFilter
+    return p.main_category === categoryFilter
   })
 
   const openCreate = () => {
@@ -73,7 +86,8 @@ export default function Products() {
     setForm({
       name: p.name,
       sku_id: p.sku_id || '',
-      category: p.category,
+      mainCategory: p.main_category || 'General Merchandise',
+      subCategory: p.sub_category || 'Cables',
       price: String(p.price),
       purchaseCost: p.purchase_cost ? String(p.purchase_cost) : '',
       stock_quantity: String(p.stock_quantity),
@@ -104,7 +118,9 @@ export default function Products() {
     const payload = {
       name: form.name,
       sku_id: form.sku_id || undefined,
-      category: form.category,
+      mainCategory: form.mainCategory,
+      subCategory: form.subCategory,
+      requiredLicense: getRequiredLicense(form.mainCategory),
       price: parseFloat(form.price),
       purchase_cost: form.purchaseCost ? parseFloat(form.purchaseCost) : null,
       stock_quantity: parseInt(form.stock_quantity, 10),
@@ -161,7 +177,8 @@ export default function Products() {
             price: pPrice !== undefined ? parseFloat(pPrice) : NaN,
             purchase_cost: pCost !== undefined ? parseFloat(pCost) : null,
             stock_quantity: pQty !== undefined ? parseInt(pQty, 10) : 0,
-            category: 'General'
+            mainCategory: 'General Merchandise',
+            subCategory: 'Misc'
           };
         }).filter(p => p.name && !isNaN(p.price));
         
@@ -229,12 +246,12 @@ export default function Products() {
         </div>
       </div>
 
-      <div className="flex gap-1 mb-4">
-        {['All', 'General', 'Tobacco'].map((cat) => (
+      <div className="flex gap-1 mb-4 overflow-x-auto pb-1">
+        {['All', ...Object.keys(CATEGORY_MAP)].map((cat) => (
           <button
             key={cat}
             onClick={() => setCategoryFilter(cat)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+            className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
               categoryFilter === cat
                 ? 'bg-indigo-600 text-white'
                 : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
@@ -287,7 +304,9 @@ export default function Products() {
                       </td>
                       <td className="px-4 py-2.5 text-gray-500 font-mono text-xs">{p.sku_id || '—'}</td>
                       <td className="px-4 py-2.5 font-medium text-gray-900">{p.name}</td>
-                      <td className="px-4 py-2.5 text-gray-500">{p.category}</td>
+                      <td className="px-4 py-2.5 text-gray-500">
+                        {p.main_category || 'General Merchandise'} &gt; {p.sub_category || 'Misc'}
+                      </td>
                       {isAdmin && <td className="px-4 py-2.5 text-gray-500 font-medium">{p.purchase_cost ? fmt(p.purchase_cost) : '—'}</td>}
                       <td className="px-4 py-2.5 font-medium">{fmt(p.price)}</td>
                       <td className="px-4 py-2.5">
@@ -372,17 +391,44 @@ export default function Products() {
             </Field>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <Field label="Category" required>
+            <Field label="Main Category" required>
               <select
-                value={form.category}
-                onChange={(e) => setForm({ ...form, category: e.target.value })}
+                value={form.mainCategory}
+                onChange={(e) => {
+                  const main = e.target.value;
+                  const subs = CATEGORY_MAP[main] || [];
+                  setForm({ ...form, mainCategory: main, subCategory: subs[0] || '' });
+                }}
                 required
                 className={input}
               >
-                <option value="General">General</option>
-                <option value="Tobacco">Tobacco</option>
+                {Object.keys(CATEGORY_MAP).map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
               </select>
             </Field>
+            <Field label="Sub Category" required>
+              <select
+                value={form.subCategory}
+                onChange={(e) => setForm({ ...form, subCategory: e.target.value })}
+                required
+                className={input}
+              >
+                {(CATEGORY_MAP[form.mainCategory] || []).map((sub) => (
+                  <option key={sub} value={sub}>{sub}</option>
+                ))}
+              </select>
+            </Field>
+            <div className="col-span-2">
+              <label className="block text-sm font-medium text-gray-500 mb-1">Required License</label>
+              <span className={`inline-block px-2.5 py-1 rounded text-xs font-semibold uppercase ${
+                getRequiredLicense(form.mainCategory) === 'Tobacco License'
+                  ? 'bg-purple-100 text-purple-800'
+                  : 'bg-blue-100 text-blue-800'
+              }`}>
+                {getRequiredLicense(form.mainCategory)}
+              </span>
+            </div>
             <Field label="Stock Qty" required>
               <input
                 type="number"

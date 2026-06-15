@@ -33,16 +33,16 @@ export default function AdminDashboard() {
     .filter((o) => o.status === 'delivered' || o.status === 'completed')
     .reduce((s, o) => s + (o.total_amount || 0), 0)
 
-  const shopMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
+  const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
 
   return (
     <div className="p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-5">Dashboard</h2>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Total Shops" value={shops.length} color="indigo" />
+        <StatCard label="Total Stores" value={shops.length} color="indigo" />
         <StatCard label="Pending Approvals" value={pending} color="yellow" />
-        <StatCard label="Approved Shops" value={approved} color="green" />
+        <StatCard label="Approved Stores" value={approved} color="green" />
         <StatCard label="Pending Orders" value={pendingOrders} color="red" />
         <StatCard label="Total Orders" value={orders.length} color="indigo" />
         <StatCard label="Sellers" value={sellers} />
@@ -57,7 +57,7 @@ export default function AdminDashboard() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['Order ID', 'Shop', 'Items', 'Total', 'Status', 'Date'].map((h) => (
+              {['Order ID', 'Store', 'Items', 'Total', 'Status', 'Date'].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                   {h}
                 </th>
@@ -68,7 +68,7 @@ export default function AdminDashboard() {
             {orders.slice(0, 10).map((o) => (
               <tr key={o.id} className="hover:bg-gray-50">
                 <td className="px-4 py-2.5 font-medium text-gray-900">WS-{o.id}</td>
-                <td className="px-4 py-2.5 text-gray-500">{shopMap[o.shop_id] || `Shop #${o.shop_id}`}</td>
+                <td className="px-4 py-2.5 text-gray-500">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
                 <td className="px-4 py-2.5 text-gray-500">{o.OrderItems?.length ?? 0}</td>
                 <td className="px-4 py-2.5 font-medium">{fmt(o.total_amount)}</td>
                 <td className="px-4 py-2.5"><StatusBadge status={o.status} /></td>

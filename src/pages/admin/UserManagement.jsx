@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getUser } from '../../auth'
-import { getUsers, createUser, activateUser, deactivateUser, resetPassword } from '../../api'
+import { getUsers, createUser, activateUser, deactivateUser, resetPassword, updateUser } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import Modal from '../../components/Modal'
 
@@ -17,6 +17,7 @@ export default function UserManagement() {
   const [roleFilter, setRoleFilter] = useState('All')
 
   const [createOpen, setCreateOpen] = useState(false)
+  const [editUser, setEditUser] = useState(null)
   const [form, setForm] = useState(blank)
   const [saving, setSaving] = useState(false)
 
@@ -38,23 +39,60 @@ export default function UserManagement() {
   const visible =
     roleFilter === 'All' ? users : users.filter((u) => u.role === roleFilter)
 
-  const doCreate = async (e) => {
+  const handleOpenCreate = () => {
+    setEditUser(null)
+    setForm(blank)
+    setCreateOpen(true)
+  }
+
+  const handleOpenEdit = (user) => {
+    setEditUser(user)
+    setForm({
+      name: user.name || '',
+      email: user.email || '',
+      password: '', // Optional during edit
+      role: user.role || 'Admin',
+      phone: user.phone || ''
+    })
+    setCreateOpen(true)
+  }
+
+  const handleSubmit = async (e) => {
     e.preventDefault()
     setSaving(true)
     try {
-      const res = await createUser({
-        name: form.name,
-        email: form.email,
-        password: form.password,
-        role: form.role,
-        phone: form.phone || undefined,
-      })
-      setUsers((prev) => [res.data.data.user, ...prev])
+      if (editUser) {
+        // Edit mode
+        const payload = {
+          name: form.name,
+          email: form.email,
+          role: form.role,
+          phone: form.phone || null
+        }
+        if (form.password) {
+          payload.password = form.password
+        }
+        const res = await updateUser(editUser.id, payload)
+        const updated = res.data.data.user
+        setUsers((prev) => prev.map((u) => (u.id === editUser.id ? { ...u, ...updated } : u)))
+        notify('User updated successfully.')
+      } else {
+        // Create mode
+        const res = await createUser({
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          role: form.role,
+          phone: form.phone || undefined,
+        })
+        setUsers((prev) => [res.data.data.user, ...prev])
+        notify('User created successfully.')
+      }
       setCreateOpen(false)
       setForm(blank)
-      notify('User created successfully.')
+      setEditUser(null)
     } catch (err) {
-      notify(err.response?.data?.message || 'Failed to create user.', 'error')
+      notify(err.response?.data?.message || 'Action failed.', 'error')
     } finally {
       setSaving(false)
     }
@@ -99,7 +137,7 @@ export default function UserManagement() {
       <div className="flex items-center justify-between mb-5">
         <h2 className="text-lg font-semibold text-gray-900">User Management</h2>
         <button
-          onClick={() => setCreateOpen(true)}
+          onClick={handleOpenCreate}
           className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
         >
           + Create User
@@ -165,6 +203,12 @@ export default function UserManagement() {
                 <td className="px-4 py-3">
                   <div className="flex gap-2">
                     <button
+                      onClick={() => handleOpenEdit(u)}
+                      className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors"
+                    >
+                      Edit
+                    </button>
+                    <button
                       onClick={() => doToggle(u)}
                       disabled={u.id === me.id}
                       className={`text-xs px-2.5 py-1 rounded transition-colors disabled:opacity-40 ${
@@ -192,9 +236,9 @@ export default function UserManagement() {
         )}
       </div>
 
-      {/* Create User Modal */}
-      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title="Create User">
-        <form onSubmit={doCreate} className="space-y-4">
+      {/* Create / Edit User Modal */}
+      <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={editUser ? 'Edit User' : 'Create User'}>
+        <form onSubmit={handleSubmit} className="space-y-4">
           <Field label="Name" required>
             <input
               value={form.name}
@@ -212,12 +256,12 @@ export default function UserManagement() {
               className={input}
             />
           </Field>
-          <Field label="Password" required>
+          <Field label={editUser ? 'Password (leave blank to keep unchanged)' : 'Password'} required={!editUser}>
             <input
               type="password"
               value={form.password}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required
+              required={!editUser}
               minLength={6}
               className={input}
             />
@@ -244,7 +288,7 @@ export default function UserManagement() {
               disabled={saving}
               className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-medium py-2 rounded-md"
             >
-              {saving ? 'Creating…' : 'Create User'}
+              {saving ? (editUser ? 'Saving…' : 'Creating…') : (editUser ? 'Save Changes' : 'Create User')}
             </button>
             <button
               type="button"

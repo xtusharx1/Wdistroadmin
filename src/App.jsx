@@ -4,7 +4,7 @@ import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import Login from './pages/Login'
 import AdminDashboard from './pages/admin/Dashboard'
-import ShopApprovals from './pages/admin/ShopApprovals'
+import StoreApprovals from './pages/admin/StoreApprovals'
 import UserManagement from './pages/admin/UserManagement'
 import Assignments from './pages/admin/Assignments'
 import AdminOrders from './pages/admin/Orders'
@@ -14,7 +14,7 @@ import Products from './pages/seller/Products'
 import Inventory from './pages/seller/Inventory'
 import SellerOrders from './pages/seller/Orders'
 import SellerInvoices from './pages/seller/Invoices'
-import AssignedShops from './pages/sales/AssignedShops'
+import AssignedStores from './pages/sales/AssignedStores'
 import SalesOrders from './pages/sales/Orders'
 import SalesDashboard from './pages/sales/Dashboard'
 import AdminSalesPerformance from './pages/admin/SalesPerformance'
@@ -38,8 +38,9 @@ export default function App() {
         <Route element={<ProtectedRoute allowedRole="Admin" />}>
           <Route element={<Layout />}>
             <Route path="/admin/dashboard" element={<AdminDashboard />} />
-            <Route path="/admin/shops" element={<ShopApprovals />} />
-            <Route path="/admin/shop-approvals" element={<Navigate to="/admin/shops" replace />} />
+            <Route path="/admin/stores" element={<StoreApprovals />} />
+            <Route path="/admin/shops" element={<Navigate to="/admin/stores" replace />} />
+            <Route path="/admin/shop-approvals" element={<Navigate to="/admin/stores" replace />} />
             <Route path="/admin/users" element={<UserManagement />} />
             <Route path="/admin/assignments" element={<Assignments />} />
             <Route path="/admin/products" element={<Products />} />
@@ -53,7 +54,8 @@ export default function App() {
         <Route element={<ProtectedRoute allowedRole="Sales Executive" />}>
           <Route element={<Layout />}>
             <Route path="/sales/dashboard" element={<SalesDashboard />} />
-            <Route path="/sales/shops" element={<AssignedShops />} />
+            <Route path="/sales/stores" element={<AssignedStores />} />
+            <Route path="/sales/shops" element={<Navigate to="/sales/stores" replace />} />
             <Route path="/sales/orders" element={<SalesOrders />} />
             <Route path="/sales/performance" element={<SalesPerformance />} />
           </Route>

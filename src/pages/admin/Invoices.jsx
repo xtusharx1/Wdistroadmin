@@ -8,7 +8,7 @@ const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'Americ
 
 export default function AdminInvoices() {
   const [orders, setOrders] = useState([])
-  const [shopMap, setShopMap] = useState({})
+  const [storeMap, setStoreMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [invoiceModal, setInvoiceModal] = useState(null)
   const [invoiceFetching, setInvoiceFetching] = useState(false)
@@ -17,8 +17,8 @@ export default function AdminInvoices() {
     Promise.all([getOrders(), getShops()]).then(([oRes, sRes]) => {
       const all = oRes.data.data.orders || []
       setOrders(all.filter((o) => o.status === 'dispatched' || o.status === 'delivered' || o.status === 'completed'))
-      const shops = sRes.data.data.shops || []
-      setShopMap(shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {}))
+      const stores = sRes.data.data.shops || []
+      setStoreMap(stores.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {}))
     }).finally(() => setLoading(false))
   }, [])
 
@@ -74,7 +74,7 @@ export default function AdminInvoices() {
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['S.No', 'Order ID', 'Shop', 'Items', 'Total', 'Status', 'Date', 'Action'].map((h) => (
+              {['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Action'].map((h) => (
                 <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
                   {h}
                 </th>
@@ -86,7 +86,7 @@ export default function AdminInvoices() {
               <tr key={o.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">WS-{o.id}</td>
-                <td className="px-4 py-3 text-gray-700">{shopMap[o.shop_id] || `Shop #${o.shop_id}`}</td>
+                <td className="px-4 py-3 text-gray-700">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
                 <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
                 <td className="px-4 py-3 font-medium">{fmt(o.total_amount)}</td>
                 <td className="px-4 py-3">
@@ -123,7 +123,7 @@ export default function AdminInvoices() {
           <InvoiceView
             order={invoiceModal.order}
             invoice={invoiceModal.invoice}
-            shopMap={shopMap}
+            storeMap={storeMap}
             onPrint={handlePrint}
             onRegenerate={handleInvoiceRegeneration}
             regenerating={invoiceFetching}
@@ -134,12 +134,43 @@ export default function AdminInvoices() {
   )
 }
 
-function InvoiceView({ order, invoice, shopMap, onPrint, onRegenerate, regenerating }) {
+function InvoiceView({ order, invoice, storeMap, onPrint, onRegenerate, regenerating }) {
   const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 
   if (!invoice) {
     return <p className="text-gray-500 text-sm">Invoice not found for this order.</p>
   }
+
+  // Calculate invoice discount details
+  const items = order.OrderItems || []
+  let subtotal = 0
+  let totalDiscount = 0
+
+  const processedItems = items.map((item) => {
+    const qty = item.approved_qty ?? item.requested_qty
+    const originalPrice = Number(item.price || 0)
+    const customPrice = item.custom_price !== null && item.custom_price !== undefined ? Number(item.custom_price) : originalPrice
+    const discount = originalPrice - customPrice
+    const finalPrice = customPrice
+    const total = finalPrice * qty
+
+    subtotal += originalPrice * qty
+    totalDiscount += discount * qty
+
+    return {
+      id: item.id,
+      name: item.Product?.name || `Product #${item.product_id}`,
+      sku: item.Product?.sku || '—',
+      qty,
+      originalPrice,
+      discount,
+      finalPrice,
+      total
+    }
+  })
+
+  const shipping = Number(invoice.shipping_charge || 0)
+  const finalPayable = subtotal - totalDiscount + shipping
 
   return (
     <div>
@@ -183,8 +214,8 @@ function InvoiceView({ order, invoice, shopMap, onPrint, onRegenerate, regenerat
           <p className="font-medium mt-0.5">WS-{order.id}</p>
         </div>
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Shop</p>
-          <p className="font-medium mt-0.5">{shopMap[order.shop_id] || `Shop #${order.shop_id}`}</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wide">Store</p>
+          <p className="font-medium mt-0.5">{storeMap[order.shop_id] || `Store #${order.shop_id}`}</p>
         </div>
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Order Date</p>
@@ -199,37 +230,42 @@ function InvoiceView({ order, invoice, shopMap, onPrint, onRegenerate, regenerat
       <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden mb-4">
         <thead className="bg-gray-50">
           <tr>
-            {['Product', 'Qty', 'Unit Price', 'Total'].map((h) => (
+            {['Product Name', 'SKU ID', 'Qty', 'Original Price', 'Discount', 'Final Price', 'Total'].map((h) => (
               <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">{h}</th>
             ))}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
-          {(order.OrderItems || []).map((item) => {
-            const qty = item.approved_qty ?? item.requested_qty
-            return (
-              <tr key={item.id}>
-                <td className="px-3 py-2.5">{item.Product?.name || `Product #${item.product_id}`}</td>
-                <td className="px-3 py-2.5">{qty} {item.Product?.unit || ''}</td>
-                <td className="px-3 py-2.5">{fmt(item.price)}</td>
-                <td className="px-3 py-2.5 font-medium">{fmt(item.price * qty)}</td>
-              </tr>
-            )
-          })}
+          {processedItems.map((item) => (
+            <tr key={item.id}>
+              <td className="px-3 py-2.5 font-medium text-gray-900">{item.name}</td>
+              <td className="px-3 py-2.5 font-mono text-xs text-gray-500">{item.sku}</td>
+              <td className="px-3 py-2.5">{item.qty}</td>
+              <td className="px-3 py-2.5">{fmt(item.originalPrice)}</td>
+              <td className="px-3 py-2.5 text-green-600">
+                {item.discount > 0 ? `-${fmt(item.discount)}` : '—'}
+              </td>
+              <td className="px-3 py-2.5">{fmt(item.finalPrice)}</td>
+              <td className="px-3 py-2.5 font-medium">{fmt(item.total)}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
 
       <div className="flex justify-end mt-4 p-4 bg-gray-50 rounded-lg">
         <div className="text-right space-y-1 text-sm">
           <p className="text-gray-500">
-            Subtotal: <span className="font-semibold text-gray-900">{fmt(order.total_amount)}</span>
+            Subtotal: <span className="font-semibold text-gray-900">{fmt(subtotal)}</span>
           </p>
           <p className="text-gray-500">
-            Shipping: <span className="font-semibold text-gray-900">{fmt(invoice.shipping_charge || 0)}</span>
+            Total Discount: <span className="font-semibold text-green-600">-{fmt(totalDiscount)}</span>
+          </p>
+          <p className="text-gray-500">
+            Shipping Charge: <span className="font-semibold text-gray-900">{fmt(shipping)}</span>
           </p>
           <div className="border-t border-gray-200 my-2 pt-2">
             <p className="text-lg font-bold text-indigo-700">
-              Grand Total: <span className="text-2xl ml-1">{fmt(invoice.final_amount)}</span>
+              Final Payable: <span className="text-2xl ml-1">{fmt(finalPayable)}</span>
             </p>
           </div>
         </div>
