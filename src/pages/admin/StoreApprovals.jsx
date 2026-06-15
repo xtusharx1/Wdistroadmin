@@ -239,10 +239,10 @@ export default function StoreApprovals() {
               <tr key={s.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">
-                  {s.shop_name}
-                  {s.tobacco_license && (
-                    <span className="ml-1.5 text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded">
-                      Tobacco
+                  <div>{s.shop_name}</div>
+                  {s.tobacco_license_number && (
+                    <span className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mt-1 inline-block">
+                      Tobacco Lic: {s.tobacco_license_number}
                     </span>
                   )}
                 </td>
