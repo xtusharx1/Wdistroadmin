@@ -8,6 +8,10 @@ function StockRow({ product, sNo, onSaved }) {
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
+  useEffect(() => {
+    setQty(product.stock_quantity)
+  }, [product.stock_quantity])
+
   const changed = qty !== product.stock_quantity
 
   const save = async () => {
@@ -31,8 +35,15 @@ function StockRow({ product, sNo, onSaved }) {
       ? 'bg-amber-50 border-amber-300 text-amber-700'
       : 'bg-white border-gray-300 text-gray-900'
 
+  const rowHighlight = (q) =>
+    q === 0
+      ? 'bg-red-50/70 hover:bg-red-100/70 transition-colors'
+      : q < 10
+      ? 'bg-amber-50/70 hover:bg-amber-100/70 transition-colors'
+      : 'hover:bg-gray-50'
+
   return (
-    <tr className="hover:bg-gray-50">
+    <tr className={rowHighlight(qty)}>
       <td className="px-4 py-3 text-gray-500 font-medium">{sNo}</td>
       <td className="px-4 py-3">
         {product.image_url ? (
@@ -75,6 +86,11 @@ export default function Inventory() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const [editedIds, setEditedIds] = useState(new Set())
+
+  useEffect(() => {
+    setEditedIds(new Set())
+  }, [filter, search])
 
   useEffect(() => {
     getProducts({ page: 1, limit: 500 })
@@ -86,12 +102,18 @@ export default function Inventory() {
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, stock_quantity: newQty } : p))
     )
+    setEditedIds((prev) => {
+      const next = new Set(prev)
+      next.add(id)
+      return next
+    })
   }
 
   const visible = products.filter((p) => {
+    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
+    if (editedIds.has(p.id)) return true
     if (filter === 'Low Stock' && !(p.stock_quantity > 0 && p.stock_quantity < 10)) return false
     if (filter === 'Out of Stock' && p.stock_quantity !== 0) return false
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 

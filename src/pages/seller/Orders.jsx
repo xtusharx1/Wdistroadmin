@@ -51,21 +51,9 @@ export default function SellerOrders() {
   }, [detailModal])
 
   const handleInvoiceGeneration = async () => {
-    let charges = 0
-    const addShipping = window.confirm("Add shipping charges?")
-    if (addShipping) {
-      const amountPrompt = window.prompt("Enter shipping charges amount ($):", "0.00")
-      if (amountPrompt === null) return
-      charges = parseFloat(amountPrompt)
-      if (isNaN(charges) || charges < 0) {
-        alert("Please enter a valid numeric value for shipping charges.")
-        return
-      }
-    }
-    
     setGenerating(true)
     try {
-      const res = await generateInvoice(detailModal.id, charges)
+      const res = await generateInvoice(detailModal.id)
       setInvoice(res.data.data.invoice)
       notify('Invoice generated successfully!')
     } catch (err) {
@@ -76,21 +64,9 @@ export default function SellerOrders() {
   }
 
   const handleInvoiceRegeneration = async () => {
-    let charges = invoice?.shipping_charge || 0
-    const addShipping = window.confirm("Do you want to add or update shipping charges?")
-    if (addShipping) {
-      const amountPrompt = window.prompt("Enter shipping charges amount ($):", charges.toFixed(2))
-      if (amountPrompt === null) return
-      charges = parseFloat(amountPrompt)
-      if (isNaN(charges) || charges < 0) {
-        alert("Please enter a valid numeric value for shipping charges.")
-        return
-      }
-    }
-    
     setGenerating(true)
     try {
-      const res = await regenerateInvoice(invoice.id, charges)
+      const res = await regenerateInvoice(invoice.id)
       setInvoice(res.data.data.invoice)
       notify('Invoice regenerated successfully!')
     } catch (err) {

@@ -33,21 +33,9 @@ export default function SellerInvoices() {
   }
 
   const handleInvoiceRegeneration = async (invoice) => {
-    let charges = invoice?.shipping_charge || 0
-    const addShipping = window.confirm("Do you want to add or update shipping charges?")
-    if (addShipping) {
-      const amountPrompt = window.prompt("Enter shipping charges amount ($):", charges.toFixed(2))
-      if (amountPrompt === null) return
-      charges = parseFloat(amountPrompt)
-      if (isNaN(charges) || charges < 0) {
-        alert("Please enter a valid numeric value for shipping charges.")
-        return
-      }
-    }
-    
     setFetching(true)
     try {
-      const res = await regenerateInvoice(invoice.id, charges)
+      const res = await regenerateInvoice(invoice.id)
       setInvoiceModal(prev => ({ ...prev, invoice: res.data.data.invoice }))
       alert('Invoice regenerated successfully!')
     } catch (err) {
@@ -160,8 +148,7 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating }) {
     }
   })
 
-  const shipping = Number(invoice.shipping_charge || 0)
-  const finalPayable = subtotal - totalDiscount + shipping
+  const finalPayable = subtotal - totalDiscount
 
   return (
     <div>
@@ -251,9 +238,7 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating }) {
           <p className="text-gray-500">
             Total Discount: <span className="font-semibold text-green-600">-{fmt(totalDiscount)}</span>
           </p>
-          <p className="text-gray-500">
-            Shipping Charge: <span className="font-semibold text-gray-900">{fmt(shipping)}</span>
-          </p>
+
           <div className="border-t border-gray-200 my-2 pt-2">
             <p className="text-lg font-bold text-indigo-700">
               Final Payable: <span className="text-2xl ml-1">{fmt(finalPayable)}</span>

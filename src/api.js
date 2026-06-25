@@ -2,7 +2,10 @@ import axios from 'axios'
 import { getUser } from './auth'
 
 const http = axios.create({
-  baseURL: 'http://ec2-184-169-137-142.us-west-1.compute.amazonaws.com:3000',
+  baseURL:
+    window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+      ? 'http://localhost:3000'
+      : 'http://ec2-184-169-137-142.us-west-1.compute.amazonaws.com:3000',
 })
 
 http.interceptors.request.use((config) => {
@@ -62,8 +65,8 @@ export const updateOrderStatus = (id, status) =>
 
 // ── Invoices ────────────────────────────────────────────────────────────────
 export const getInvoice = (orderId) => http.get(`/invoices/${orderId}`)
-export const generateInvoice = (orderId, shipping_charge = 0) => http.post(`/invoices/${orderId}/generate`, { shipping_charge })
-export const regenerateInvoice = (invoiceId, shipping_charge = 0) => http.post(`/invoices/${invoiceId}/regenerate`, { shipping_charge })
+export const generateInvoice = (orderId) => http.post(`/invoices/${orderId}/generate`)
+export const regenerateInvoice = (invoiceId) => http.post(`/invoices/${invoiceId}/regenerate`)
 
 // ── Sales ───────────────────────────────────────────────────────────────────
 export const getSalesAssignments = () => http.get('/sales/shops')

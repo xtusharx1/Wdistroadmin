@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getShops, approveShop, rejectShop, resetShopPassword, updateShop } from '../../api'
+import { getShops, approveShop, rejectShop, resetShopPassword, updateShop, getUsers, createAssignment } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import Modal from '../../components/Modal'
 
@@ -32,6 +32,12 @@ export default function StoreApprovals() {
   })
   const [savingEdit, setSavingEdit] = useState(false)
 
+  // Approval assignment states
+  const [execs, setExecs] = useState([])
+  const [approvingStore, setApprovingStore] = useState(null)
+  const [selectedExecId, setSelectedExecId] = useState('')
+  const [approving, setApproving] = useState(false)
+
   const notify = (text, type = 'success') => {
     setMsg({ text, type })
     setTimeout(() => setMsg(null), 3000)
@@ -45,6 +51,11 @@ export default function StoreApprovals() {
 
   useEffect(() => {
     fetchStores()
+    getUsers()
+      .then((res) => {
+        setExecs((res.data.data.users || []).filter((u) => u.role === 'Sales Executive'))
+      })
+      .catch((err) => console.error('Failed to load users', err))
   }, [])
 
   const sortedStores = [...stores].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
@@ -52,19 +63,36 @@ export default function StoreApprovals() {
   const visible =
     filter === 'All' ? sortedStores : sortedStores.filter((s) => s.approval_status === filter)
 
-  const doApprove = async (store) => {
-    if (!confirm(`Approve "${store.shop_name}"?`)) return
-    setActing(store.id)
+  const handleApprovalConfirm = async (e) => {
+    e.preventDefault()
+    if (!approvingStore) return
+    setApproving(true)
     try {
-      await approveShop(store.id)
+      await approveShop(approvingStore.id)
+      
+      let assignedText = ''
+      if (selectedExecId) {
+        const exec = execs.find((u) => String(u.id) === String(selectedExecId))
+        const todayStr = new Date().toISOString().split('T')[0]
+        await createAssignment({
+          sales_exec_id: Number(selectedExecId),
+          shop_id: approvingStore.id,
+          start_date: todayStr
+        })
+        if (exec) {
+          assignedText = ` and assigned to ${exec.name}`
+        }
+      }
+
       setStores((prev) =>
-        prev.map((s) => (s.id === store.id ? { ...s, approval_status: 'Approved', approved: true } : s))
+        prev.map((s) => (s.id === approvingStore.id ? { ...s, approval_status: 'Approved', approved: true } : s))
       )
-      notify('Store approved.')
+      notify(`Store approved${assignedText}.`)
+      setApprovingStore(null)
     } catch (err) {
-      notify(err.response?.data?.message || 'Failed to approve.', 'error')
+      notify(err.response?.data?.message || 'Failed to approve store.', 'error')
     } finally {
-      setActing(null)
+      setApproving(false)
     }
   }
 
@@ -254,7 +282,7 @@ export default function StoreApprovals() {
                   <div className="flex gap-2">
                     {s.approval_status !== 'Approved' && (
                       <button
-                        onClick={() => doApprove(s)}
+                        onClick={() => { setApprovingStore(s); setSelectedExecId('') }}
                         disabled={acting === s.id}
                         className="text-xs px-2.5 py-1 rounded bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-colors"
                       >
@@ -492,6 +520,53 @@ export default function StoreApprovals() {
             <button
               type="button"
               onClick={() => setLicenseFor(null)}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-md"
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Approve & Assign Store Modal */}
+      <Modal open={!!approvingStore} onClose={() => setApprovingStore(null)} title="Approve Store">
+        <form onSubmit={handleApprovalConfirm} className="space-y-4">
+          <p className="text-sm text-gray-600">
+            Are you sure you want to approve store <strong className="text-gray-900">{approvingStore?.shop_name}</strong>?
+          </p>
+          
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 mb-1.5">
+              Assign to Sales Agent (Optional)
+            </label>
+            <select
+              value={selectedExecId}
+              onChange={(e) => setSelectedExecId(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            >
+              <option value="">Select Sales Agent...</option>
+              {execs.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.name} {u.email ? `(${u.email})` : ''}
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              Select an agent to assign this store immediately upon approval.
+            </p>
+          </div>
+
+          <div className="flex gap-3 pt-2">
+            <button
+              type="submit"
+              disabled={approving}
+              className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-sm font-medium py-2 rounded-md transition-colors"
+            >
+              {approving ? 'Approving…' : 'Approve Store'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setApprovingStore(null)}
               className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-md"
             >
               Cancel

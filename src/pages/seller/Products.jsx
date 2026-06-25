@@ -8,10 +8,10 @@ const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const input = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
 
 const CATEGORY_MAP = {
-  'General Merchandise': ['Cables', 'Toys', 'Misc', 'Clothing'],
+  'General Merchandise': ['Cables', 'Toys', 'Misc', 'Clothing', 'Supplements', 'Medicine (OTC)'],
   'Glass': ['Glass Rigs', 'Glass Accessories', 'Grinders'],
-  'Tobacco': ['Wraps', 'Cigars', 'Cigarillos'],
-  'Torch Lighters': ['Pocket Torches', 'High Flame', 'Butane'],
+  'Tobacco': ['Wraps', 'Cigars', 'Cigarillos', 'Rolling Tobacco', 'Chew/Pouches'],
+  'Lighters': ['Pocket Torches', 'High Flame', 'Butane', 'Torch Lighters'],
   'Vape': ['Disposable', 'Hardware', 'Vape Accessories', 'Juices'],
   'Rolling Papers': ['Papers', 'Rolling Machine', 'Tips', 'Cones']
 }
@@ -20,7 +20,7 @@ const getRequiredLicense = (mainCat) => {
   return (mainCat === 'Tobacco' || mainCat === 'Vape') ? 'Tobacco License' : 'Seller Permit'
 }
 
-const blankForm = { name: '', sku_id: '', mainCategory: 'General Merchandise', subCategory: 'Cables', price: '', purchaseCost: '', stock_quantity: '', image_url: '' }
+const blankForm = { name: '', sku_id: '', mainCategory: 'General Merchandise', subCategory: 'Cables', price: '', purchaseCost: '', stock_quantity: '', image_url: '', description: '' }
 
 export default function Products() {
   const user = getUser()
@@ -30,6 +30,9 @@ export default function Products() {
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('All')
+  const [subCategoryFilter, setSubCategoryFilter] = useState('All')
+  const [sortBy, setSortBy] = useState('created_at')
+  const [sortOrder, setSortOrder] = useState('desc')
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState(null)
 
@@ -38,6 +41,11 @@ export default function Products() {
   const [form, setForm] = useState(blankForm)
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
+
+  // Duplicate warning states
+  const [duplicateModalOpen, setDuplicateModalOpen] = useState(false)
+  const [potentialDuplicates, setPotentialDuplicates] = useState([])
+  const [pendingPayload, setPendingPayload] = useState(null)
 
   const LIMIT = 15
 
@@ -57,7 +65,11 @@ export default function Products() {
       getProducts({
         page,
         limit: LIMIT,
-        search: debouncedSearch || undefined
+        search: debouncedSearch || undefined,
+        mainCategory: categoryFilter !== 'All' ? categoryFilter : undefined,
+        subCategory: subCategoryFilter !== 'All' ? subCategoryFilter : undefined,
+        sortBy,
+        sortOrder
       })
         .then((res) => {
           setProducts(res.data.data.products || [])
@@ -65,15 +77,12 @@ export default function Products() {
         })
         .finally(() => setLoading(false))
     },
-    [debouncedSearch]
+    [debouncedSearch, categoryFilter, subCategoryFilter, sortBy, sortOrder]
   )
 
   useEffect(() => { load(1) }, [load])
 
-  const visible = products.filter((p) => {
-    if (categoryFilter === 'All') return true
-    return p.main_category === categoryFilter
-  })
+  const visible = products
 
   const openCreate = () => {
     setEditing(null)
@@ -92,8 +101,18 @@ export default function Products() {
       purchaseCost: p.purchase_cost ? String(p.purchase_cost) : '',
       stock_quantity: String(p.stock_quantity),
       image_url: p.image_url || '',
+      description: p.description || '',
     })
     setModalOpen(true)
+  }
+
+  const handleSort = (key) => {
+    if (sortBy === key) {
+      setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortBy(key)
+      setSortOrder('asc')
+    }
   }
 
   const handleImageUpload = async (e) => {
@@ -112,8 +131,8 @@ export default function Products() {
     }
   }
 
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const handleSubmit = async (e, bypass = false) => {
+    if (e) e.preventDefault()
     setSaving(true)
     const payload = {
       name: form.name,
@@ -125,6 +144,8 @@ export default function Products() {
       purchase_cost: form.purchaseCost ? parseFloat(form.purchaseCost) : null,
       stock_quantity: parseInt(form.stock_quantity, 10),
       image_url: form.image_url || undefined,
+      description: form.description || undefined,
+      bypassDuplicateCheck: bypass
     }
     try {
       if (editing) {
@@ -139,8 +160,16 @@ export default function Products() {
         notify('Product created.')
       }
       setModalOpen(false)
+      setDuplicateModalOpen(false)
+      setPendingPayload(null)
     } catch (err) {
-      notify(err.response?.data?.message || 'Save failed.', 'error')
+      if (err.response?.status === 409 && err.response?.data?.code === 'POTENTIAL_DUPLICATE') {
+        setPotentialDuplicates(err.response.data.data.duplicates || [])
+        setPendingPayload(payload)
+        setDuplicateModalOpen(true)
+      } else {
+        notify(err.response?.data?.message || 'Save failed.', 'error')
+      }
     } finally {
       setSaving(false)
     }
@@ -165,20 +194,117 @@ export default function Products() {
             return match !== undefined ? row[match] : undefined;
           };
           
-          const pName = findVal(['product/service name', 'name', 'product name', 'service name']);
-          const pSku = findVal(['sku', 'sku id', 'sku_id']);
-          const pPrice = findVal(['sales price / rate', 'price', 'sales price', 'rate', 'selling price']);
-          const pCost = findVal(['purchase cost', 'purchase_cost', 'cost']);
-          const pQty = findVal(['quantity on hand', 'stock_quantity', 'stock', 'qty', 'quantity']);
+          const pName = findVal([
+            'product/service name', 'name', 'product name', 'service name', 'title',
+            'product title', 'product_name', 'service_name', 'item', 'item name', 'item_name',
+            'product', 'description', 'desc'
+          ]);
+          const pSku = findVal([
+            'sku', 'sku id', 'sku_id', 'product code', 'product_code', 'code',
+            'item code', 'item_code', 'id', 'sku_number', 'skunumber', 'barcode', 'upc', 'ean'
+          ]);
+          const pPrice = findVal([
+            'sales price / rate', 'price', 'sales price', 'rate', 'selling price',
+            'selling_price', 'sales_price', 'unit price', 'unit_price', 'retail price',
+            'retail_price', 'value'
+          ]);
+          const pCost = findVal([
+            'purchase cost', 'purchase_cost', 'cost', 'purchase_price', 'purchase price',
+            'cost price', 'cost_price', 'unit cost', 'unit_cost', 'buy price', 'buy_price',
+            'purchasecost', 'costprice'
+          ]);
+          const pQty = findVal([
+            'quantity on hand', 'stock_quantity', 'stock', 'qty', 'quantity',
+            'qty on hand', 'qty_on_hand', 'quantity_on_hand', 'inventory', 'in stock',
+            'instock', 'stock qty', 'stock_qty', 'count', 'quantityonhand', 'qtyonhand',
+            'avail', 'available', 'available qty', 'available quantity', 'available_qty',
+            'available_quantity', 'on hand', 'on_hand', 'onhand'
+          ]);
+          
+          const pMainCategory = findVal(['main category', 'main_category', 'category', 'class']);
+          const pSubCategory = findVal(['sub category', 'sub_category', 'subcategory']);
+          
+          const pDesc = findVal(['description', 'desc', 'product description', 'item description', 'details', 'detail']);
+          
+          let mainCat = 'General Merchandise';
+          let subCat = 'Misc';
+          
+          if (pMainCategory) {
+            const cleanedMain = String(pMainCategory).trim().toLowerCase();
+            const matchedKey = Object.keys(CATEGORY_MAP).find(
+              (key) => key.toLowerCase() === cleanedMain
+            );
+            if (matchedKey) {
+              mainCat = matchedKey;
+              subCat = CATEGORY_MAP[matchedKey][0] || 'Misc';
+              
+              if (pSubCategory) {
+                const cleanedSub = String(pSubCategory).trim().toLowerCase();
+                const matchedSub = CATEGORY_MAP[matchedKey].find(
+                  (sub) => sub.toLowerCase() === cleanedSub
+                );
+                if (matchedSub) {
+                  subCat = matchedSub;
+                } else {
+                  subCat = String(pSubCategory).trim();
+                }
+              }
+            } else {
+              // Check if the main category column actually matches a subcategory
+              let foundMatch = false;
+              for (const [key, subs] of Object.entries(CATEGORY_MAP)) {
+                const matchedSub = subs.find(sub => sub.toLowerCase() === cleanedMain);
+                if (matchedSub) {
+                  mainCat = key;
+                  subCat = matchedSub;
+                  foundMatch = true;
+                  break;
+                }
+              }
+              if (!foundMatch) {
+                mainCat = String(pMainCategory).trim();
+                subCat = pSubCategory ? String(pSubCategory).trim() : 'Misc';
+              }
+            }
+          } else if (categoryFilter !== 'All') {
+            mainCat = categoryFilter;
+            subCat = CATEGORY_MAP[categoryFilter]?.[0] || 'Misc';
+          }
+          
+          let parsedQty = 0;
+          if (pQty !== undefined && pQty !== null && pQty !== '') {
+            const num = parseInt(pQty, 10);
+            if (!isNaN(num)) {
+              parsedQty = num;
+            }
+          }
+
+          let parsedPrice = NaN;
+          if (pPrice !== undefined && pPrice !== null && pPrice !== '') {
+            const num = parseFloat(pPrice);
+            if (!isNaN(num)) {
+              parsedPrice = num;
+            }
+          }
+
+          let parsedCost = null;
+          if (pCost !== undefined && pCost !== null && pCost !== '') {
+            const num = parseFloat(pCost);
+            if (!isNaN(num)) {
+              parsedCost = num;
+            }
+          }
           
           return {
             name: pName ? String(pName).trim() : '',
             sku_id: pSku ? String(pSku).trim() : null,
-            price: pPrice !== undefined ? parseFloat(pPrice) : NaN,
-            purchase_cost: pCost !== undefined ? parseFloat(pCost) : null,
-            stock_quantity: pQty !== undefined ? parseInt(pQty, 10) : 0,
-            mainCategory: 'General Merchandise',
-            subCategory: 'Misc'
+            price: parsedPrice,
+            purchase_cost: parsedCost,
+            stock_quantity: parsedQty,
+            mainCategory: mainCat,
+            subCategory: subCat,
+            requiredLicense: getRequiredLicense(mainCat),
+            description: pDesc ? String(pDesc).trim() : null
           };
         }).filter(p => p.name && !isNaN(p.price));
         
@@ -250,7 +376,10 @@ export default function Products() {
         {['All', ...Object.keys(CATEGORY_MAP)].map((cat) => (
           <button
             key={cat}
-            onClick={() => setCategoryFilter(cat)}
+            onClick={() => {
+              setCategoryFilter(cat)
+              setSubCategoryFilter('All')
+            }}
             className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
               categoryFilter === cat
                 ? 'bg-indigo-600 text-white'
@@ -261,6 +390,24 @@ export default function Products() {
           </button>
         ))}
       </div>
+
+      {categoryFilter !== 'All' && CATEGORY_MAP[categoryFilter] && (
+        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1.5 border-b border-gray-100">
+          {['All', ...CATEGORY_MAP[categoryFilter]].map((sub) => (
+            <button
+              key={sub}
+              onClick={() => setSubCategoryFilter(sub)}
+              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
+                subCategoryFilter === sub
+                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
+                  : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              {sub}
+            </button>
+          ))}
+        </div>
+      )}
 
       {msg && (
         <div
@@ -282,11 +429,15 @@ export default function Products() {
             <table className="w-full text-sm">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  {['S.No', 'Image', 'SKU ID', 'Name', 'Category', ...(isAdmin ? ['Purchase Cost'] : []), 'Price', 'Stock', 'Actions'].map((h) => (
-                    <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                      {h}
-                    </th>
-                  ))}
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">S.No</th>
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Image</th>
+                  <SortHeader label="SKU ID" sortKey="sku_id" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                  <SortHeader label="Name" sortKey="name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Category</th>
+                  {isAdmin && <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Purchase Cost</th>}
+                  <SortHeader label="Price" sortKey="price" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                  <SortHeader label="Stock" sortKey="stock_quantity" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -462,6 +613,16 @@ export default function Products() {
                 />
               </Field>
             )}
+            <div className="col-span-2">
+              <Field label="Description">
+                <textarea
+                  value={form.description}
+                  onChange={(e) => setForm({ ...form, description: e.target.value })}
+                  className={input + " h-20 resize-none"}
+                  placeholder="Enter product description..."
+                />
+              </Field>
+            </div>
           </div>
           <Field label="Product Image">
             <input
@@ -493,6 +654,134 @@ export default function Products() {
           </div>
         </form>
       </Modal>
+
+      {/* Duplicate Warning Modal */}
+      <Modal
+        open={duplicateModalOpen}
+        onClose={() => setDuplicateModalOpen(false)}
+        title="Potential Duplicate Found"
+        size="lg"
+      >
+        <div className="space-y-4">
+          <div className="bg-amber-50 border border-amber-200 rounded-md p-3 text-sm text-amber-800">
+            A similar product already exists. Please review the existing product before creating a duplicate.
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* New Product Column */}
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <h4 className="font-semibold text-gray-900 mb-3 border-b pb-1.5 text-sm uppercase tracking-wide">
+                New Product
+              </h4>
+              <div className="space-y-2 text-xs">
+                <div>
+                  <span className="text-gray-400 font-medium block">Name:</span>
+                  <span className="text-gray-900 font-semibold text-sm">{pendingPayload?.name}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-medium block">Category:</span>
+                  <span className="text-gray-700 font-medium">
+                    {pendingPayload?.mainCategory} &gt; {pendingPayload?.subCategory}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-medium block">SKU ID:</span>
+                  <span className="text-gray-700 font-mono">{pendingPayload?.sku_id || '—'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-medium block">Price:</span>
+                  <span className="text-gray-900 font-semibold">{pendingPayload ? fmt(pendingPayload.price) : '—'}</span>
+                </div>
+                <div>
+                  <span className="text-gray-400 font-medium block">Stock:</span>
+                  <span className="text-gray-700">{pendingPayload?.stock_quantity}</span>
+                </div>
+                {pendingPayload?.description && (
+                  <div>
+                    <span className="text-gray-400 font-medium block">Description:</span>
+                    <p className="text-gray-600 italic line-clamp-3">{pendingPayload.description}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Existing Product(s) Column */}
+            <div className="space-y-4">
+              {potentialDuplicates.map((dup, idx) => (
+                <div key={dup.id} className="border border-indigo-100 rounded-lg p-4 bg-indigo-50/30">
+                  <h4 className="font-semibold text-indigo-900 mb-3 border-b border-indigo-100 pb-1.5 text-sm uppercase tracking-wide flex justify-between items-center">
+                    <span>Existing Product {potentialDuplicates.length > 1 ? `#${idx + 1}` : ''}</span>
+                    <span className="text-[10px] bg-indigo-100 text-indigo-800 px-1.5 py-0.5 rounded font-bold">
+                      {dup.sku_id || `ID: ${dup.id}`}
+                    </span>
+                  </h4>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="text-gray-400 font-medium block">Name:</span>
+                      <span className="text-gray-900 font-semibold text-sm">{dup.name}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 font-medium block">Category:</span>
+                      <span className="text-gray-700 font-medium">
+                        {dup.main_category} &gt; {dup.sub_category}
+                      </span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 font-medium block">SKU ID:</span>
+                      <span className="text-gray-700 font-mono">{dup.sku_id || '—'}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 font-medium block">Price:</span>
+                      <span className="text-gray-900 font-semibold">{fmt(dup.price)}</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-400 font-medium block">Stock:</span>
+                      <span className="text-gray-700">{dup.stock_quantity}</span>
+                    </div>
+                    {dup.description && (
+                      <div>
+                        <span className="text-gray-400 font-medium block">Description:</span>
+                        <p className="text-gray-600 italic line-clamp-3">{dup.description}</p>
+                      </div>
+                    )}
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setDuplicateModalOpen(false)
+                          setModalOpen(false)
+                          openEdit(dup)
+                        }}
+                        className="text-xs px-2.5 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors w-full"
+                      >
+                        View Existing Product
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex gap-3 pt-3 border-t">
+            <button
+              type="button"
+              onClick={() => handleSubmit(null, true)}
+              disabled={saving}
+              className="flex-1 bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium py-2 rounded-md transition-colors"
+            >
+              {saving ? 'Creating…' : 'Create Anyway'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setDuplicateModalOpen(false)}
+              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-md transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div>
   )
 }
@@ -505,5 +794,22 @@ function Field({ label, required, children }) {
       </label>
       {children}
     </div>
+  )
+}
+
+function SortHeader({ label, sortKey, currentSort, currentOrder, onSort }) {
+  const isSorted = currentSort === sortKey
+  return (
+    <th 
+      onClick={() => onSort(sortKey)}
+      className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide cursor-pointer hover:bg-gray-100 hover:text-gray-700 transition-colors select-none"
+    >
+      <div className="flex items-center gap-1">
+        <span>{label}</span>
+        <span className="text-[10px] text-gray-400">
+          {isSorted ? (currentOrder === 'asc' ? '▲' : '▼') : '⇅'}
+        </span>
+      </div>
+    </th>
   )
 }

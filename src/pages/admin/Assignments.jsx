@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getAssignments, getUsers, getShops, createAssignment, endAssignment, updateAssignment } from '../../api'
+import { getAssignments, getUsers, getShops, createAssignment, endAssignment, updateAssignment, getIncentives } from '../../api'
 import Modal from '../../components/Modal'
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
@@ -22,6 +22,7 @@ export default function Assignments() {
   const [saving, setSaving] = useState(false)
   const [ending, setEnding] = useState(null)
   const [msg, setMsg] = useState(null)
+  const [performance, setPerformance] = useState([])
 
   const notify = (text, type = 'success') => {
     setMsg({ text, type })
@@ -29,11 +30,12 @@ export default function Assignments() {
   }
 
   const load = () =>
-    Promise.all([getAssignments(), getUsers(), getShops()]).then(
-      ([aRes, uRes, sRes]) => {
+    Promise.all([getAssignments(), getUsers(), getShops(), getIncentives()]).then(
+      ([aRes, uRes, sRes, pRes]) => {
         setAssignments(aRes.data.data.assignments || [])
         setExecs((uRes.data.data.users || []).filter((u) => u.role === 'Sales Executive'))
         setStores(sRes.data.data.shops || [])
+        setPerformance(pRes.data.data.performance || [])
       }
     ).finally(() => setLoading(false))
 
@@ -249,6 +251,65 @@ export default function Assignments() {
               <p className="text-xs text-amber-600 mt-1">No active Sales Executives found. Create one in User Management first.</p>
             )}
           </div>
+
+          {form.sales_exec_id && (() => {
+            const activeStores = assignments
+              .filter((a) => String(a.sales_exec_id) === String(form.sales_exec_id) && !a.end_date)
+              .map((a) => a.Shop?.shop_name || `Store #${a.shop_id}`)
+            
+            const execPerf = performance.filter((p) => String(p.sales_exec?.id) === String(form.sales_exec_id))
+            const totalSales = execPerf.reduce((sum, item) => sum + (item.order?.total_amount || 0), 0)
+            const totalOrders = execPerf.length
+            
+            return (
+              <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3.5 space-y-2.5 text-xs">
+                <div className="flex items-center justify-between">
+                  <span className="font-semibold text-indigo-900 uppercase tracking-wider text-[10px]">
+                    Sales Agent Overview
+                  </span>
+                  <a
+                    href={`/admin/sales-performance?execId=${form.sales_exec_id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                  >
+                    View Overall Performance →
+                  </a>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="bg-white/60 rounded p-2 border border-indigo-50/50">
+                    <p className="text-gray-500 font-medium">Total Sales</p>
+                    <p className="text-sm font-bold text-gray-900 mt-0.5">
+                      ${totalSales.toLocaleString('en-US', { minimumFractionDigits: 2 })}
+                    </p>
+                  </div>
+                  <div className="bg-white/60 rounded p-2 border border-indigo-50/50">
+                    <p className="text-gray-500 font-medium">Orders Driven</p>
+                    <p className="text-sm font-bold text-gray-900 mt-0.5">{totalOrders}</p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="text-gray-500 font-medium mb-1">Active Store Assignments ({activeStores.length})</p>
+                  {activeStores.length > 0 ? (
+                    <div className="flex flex-wrap gap-1 mt-0.5">
+                      {activeStores.map((store, i) => (
+                        <span
+                          key={i}
+                          className="bg-indigo-100/60 text-indigo-800 px-2 py-0.5 rounded font-medium"
+                        >
+                          {store}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-400 italic">No active store assignments</p>
+                  )}
+                </div>
+              </div>
+            )
+          })()}
 
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Store</label>
