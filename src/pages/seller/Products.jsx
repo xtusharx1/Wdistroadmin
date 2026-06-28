@@ -116,7 +116,7 @@ const mapCategoryFromText = (name, desc, mainCatInput, subCatInput) => {
   return { mainCat: 'General Merchandise', subCat: 'Misc' };
 }
 
-const blankForm = { name: '', sku_id: '', mainCategory: 'General Merchandise', subCategory: 'Cables', price: '', purchaseCost: '', stock_quantity: '', image_url: '', description: '', is_active: true }
+const blankForm = { name: '', sku_id: '', mainCategory: '', subCategory: '', price: '', purchaseCost: '', stock_quantity: '', image_url: '', description: '', is_active: true }
 
 export default function Products() {
   const user = getUser()
@@ -183,6 +183,7 @@ export default function Products() {
   const openCreate = () => {
     setEditing(null)
     setForm(blankForm)
+    setMsg(null)
     setModalOpen(true)
   }
 
@@ -200,6 +201,7 @@ export default function Products() {
       description: p.description || '',
       is_active: p.is_active !== false
     })
+    setMsg(null)
     setModalOpen(true)
   }
 
@@ -265,6 +267,7 @@ export default function Products() {
         setPotentialDuplicates(err.response.data.data.duplicates || [])
         setPendingPayload(payload)
         setDuplicateModalOpen(true)
+        setModalOpen(false)
       } else {
         notify(err.response?.data?.message || 'Save failed.', 'error')
       }
@@ -654,6 +657,11 @@ export default function Products() {
         title={editing ? `Edit: ${editing.name}` : 'Add Product'}
       >
         <form onSubmit={handleSubmit} className="space-y-3">
+          {msg && msg.type === 'error' && (
+            <div className="rounded-md bg-red-50 text-red-700 border border-red-200 px-4 py-2.5 text-xs font-medium">
+              {msg.text}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <Field label="Name" required>
               <input
@@ -678,12 +686,12 @@ export default function Products() {
                 value={form.mainCategory}
                 onChange={(e) => {
                   const main = e.target.value;
-                  const subs = CATEGORY_MAP[main] || [];
-                  setForm({ ...form, mainCategory: main, subCategory: subs[0] || '' });
+                  setForm({ ...form, mainCategory: main, subCategory: '' });
                 }}
                 required
                 className={input}
               >
+                <option value="" disabled>Select category…</option>
                 {Object.keys(CATEGORY_MAP).map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
@@ -695,7 +703,9 @@ export default function Products() {
                 onChange={(e) => setForm({ ...form, subCategory: e.target.value })}
                 required
                 className={input}
+                disabled={!form.mainCategory}
               >
+                <option value="" disabled>{form.mainCategory ? 'Select sub category…' : 'Select a category first'}</option>
                 {(CATEGORY_MAP[form.mainCategory] || []).map((sub) => (
                   <option key={sub} value={sub}>{sub}</option>
                 ))}
@@ -801,7 +811,7 @@ export default function Products() {
       {/* Duplicate Warning Modal */}
       <Modal
         open={duplicateModalOpen}
-        onClose={() => setDuplicateModalOpen(false)}
+        onClose={() => { setDuplicateModalOpen(false); setModalOpen(true) }}
         title="Potential Duplicate Found"
         size="lg"
       >
@@ -887,19 +897,7 @@ export default function Products() {
                         <p className="text-gray-600 italic line-clamp-3">{dup.description}</p>
                       </div>
                     )}
-                    <div className="pt-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDuplicateModalOpen(false)
-                          setModalOpen(false)
-                          openEdit(dup)
-                        }}
-                        className="text-xs px-2.5 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors w-full"
-                      >
-                        View Existing Product
-                      </button>
-                    </div>
+
                   </div>
                 </div>
               ))}
@@ -917,7 +915,7 @@ export default function Products() {
             </button>
             <button
               type="button"
-              onClick={() => setDuplicateModalOpen(false)}
+              onClick={() => { setDuplicateModalOpen(false); setModalOpen(true) }}
               className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-md transition-colors"
             >
               Cancel
