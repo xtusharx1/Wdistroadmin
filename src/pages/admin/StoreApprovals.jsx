@@ -556,18 +556,40 @@ export default function StoreApprovals() {
             </p>
           </div>
 
-          <div className="flex gap-3 pt-2">
+          <div className="flex flex-col gap-2 pt-2">
             <button
               type="submit"
-              disabled={approving}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-60 text-white text-sm font-medium py-2 rounded-md transition-colors"
+              disabled={approving || !selectedExecId}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium py-2 rounded-md transition-colors"
             >
-              {approving ? 'Approving…' : 'Approve Store'}
+              {approving ? 'Processing...' : 'Approve & Assign Agent'}
+            </button>
+            <button
+              type="button"
+              disabled={approving}
+              onClick={async () => {
+                setApproving(true)
+                try {
+                  await approveShop(approvingStore.id)
+                  setStores((prev) =>
+                    prev.map((s) => (s.id === approvingStore.id ? { ...s, approval_status: 'Approved', approved: true } : s))
+                  )
+                  notify('Store approved.')
+                  setApprovingStore(null)
+                } catch (err) {
+                  notify(err.response?.data?.message || 'Failed to approve store.', 'error')
+                } finally {
+                  setApproving(false)
+                }
+              }}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-medium py-2 rounded-md transition-colors"
+            >
+              {approving ? 'Processing...' : 'Approve without Agent (Skip)'}
             </button>
             <button
               type="button"
               onClick={() => setApprovingStore(null)}
-              className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-md"
+              className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-md"
             >
               Cancel
             </button>
