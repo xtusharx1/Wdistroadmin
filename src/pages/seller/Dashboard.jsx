@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getProducts, getOrders, getShops } from '../../api'
+import { getDashboardStats } from '../../api'
 import StatCard from '../../components/StatCard'
 import StatusBadge from '../../components/StatusBadge'
 
@@ -7,34 +7,32 @@ const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
 
 export default function SellerDashboard() {
-  const [products, setProducts] = useState([])
-  const [orders, setOrders] = useState([])
-  const [shops, setShops] = useState([])
+  const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    Promise.all([
-      getProducts({ page: 1, limit: 200 }),
-      getOrders(),
-      getShops(),
-    ]).then(([pRes, oRes, sRes]) => {
-      setProducts(pRes.data.data.products || [])
-      setOrders(oRes.data.data.orders || [])
-      setShops(sRes.data.data.shops || [])
-    }).finally(() => setLoading(false))
+    getDashboardStats()
+      .then((res) => {
+        setStats(res.data.data)
+      })
+      .catch((err) => {
+        console.error('Failed to load seller dashboard stats:', err)
+      })
+      .finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+  if (!stats) return <div className="p-6 text-sm text-red-500">Failed to load dashboard statistics.</div>
 
-  const totalProducts = products.length
-  const lowStock = products.filter((p) => p.stock_quantity > 0 && p.stock_quantity < 10).length
-  const outOfStock = products.filter((p) => p.stock_quantity === 0).length
-  const pendingOrders = orders.filter((o) => o.status === 'pending').length
-  const revenue = orders
-    .filter((o) => o.status === 'delivered' || o.status === 'completed')
-    .reduce((s, o) => s + (o.total_amount || 0), 0)
-
-  const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
+  const {
+    totalProducts,
+    lowStock,
+    outOfStock,
+    totalOrders,
+    pendingOrders,
+    totalRevenue,
+    recentOrders
+  } = stats
 
   return (
     <div className="p-6">
@@ -45,8 +43,8 @@ export default function SellerDashboard() {
         <StatCard label="Low Stock" value={lowStock} color="yellow" sub="Under 10 units" />
         <StatCard label="Out of Stock" value={outOfStock} color="red" />
         <StatCard label="Pending Orders" value={pendingOrders} color="yellow" />
-        <StatCard label="Total Orders" value={orders.length} color="indigo" />
-        <StatCard label="Revenue (Delivered)" value={fmt(revenue)} color="green" />
+        <StatCard label="Total Orders" value={totalOrders} color="indigo" />
+        <StatCard label="Revenue (Delivered)" value={fmt(totalRevenue)} color="green" />
       </div>
 
       {lowStock > 0 && (
@@ -70,11 +68,11 @@ export default function SellerDashboard() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {orders.slice(0, 8).map((o) => (
+            {recentOrders.map((o) => (
               <tr key={o.id} className="hover:bg-gray-50">
                 <td className="px-4 py-2.5 font-medium">WS-{o.id}</td>
-                <td className="px-4 py-2.5 text-gray-500">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
-                <td className="px-4 py-2.5 text-gray-500">{o.OrderItems?.length ?? 0}</td>
+                <td className="px-4 py-2.5 text-gray-500">{o.shop_name}</td>
+                <td className="px-4 py-2.5 text-gray-500">{o.itemCount}</td>
                 <td className="px-4 py-2.5 font-medium">{fmt(o.total_amount)}</td>
                 <td className="px-4 py-2.5"><StatusBadge status={o.status} /></td>
                 <td className="px-4 py-2.5 text-gray-500">{fmtDate(o.created_at)}</td>
@@ -82,7 +80,7 @@ export default function SellerDashboard() {
             ))}
           </tbody>
         </table>
-        {orders.length === 0 && (
+        {recentOrders.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-10">No orders yet</p>
         )}
       </div>

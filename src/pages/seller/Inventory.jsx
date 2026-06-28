@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { getProducts, updateStock } from '../../api'
+import { useState, useEffect, useCallback } from 'react'
+import { getProducts, updateStock, getDashboardStats } from '../../api'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 
@@ -53,7 +53,7 @@ function StockRow({ product, sNo, onSaved }) {
         )}
       </td>
       <td className="px-4 py-3 font-medium text-gray-900">{product.name}</td>
-      <td className="px-4 py-3 text-gray-500">{product.category}</td>
+      <td className="px-4 py-3 text-gray-500">{product.main_category} &gt; {product.sub_category}</td>
       <td className="px-4 py-3 text-gray-600">{fmt(product.price)}</td>
       <td className="px-4 py-3">
         <input
@@ -83,44 +83,66 @@ function StockRow({ product, sNo, onSaved }) {
 
 export default function Inventory() {
   const [products, setProducts] = useState([])
+  const [pagination, setPagination] = useState({ total: 0, page: 1, totalPages: 1 })
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
-  const [editedIds, setEditedIds] = useState(new Set())
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [stockCounts, setStockCounts] = useState({ lowStock: 0, outOfStock: 0 })
 
-  useEffect(() => {
-    setEditedIds(new Set())
-  }, [filter, search])
+  const LIMIT = 15
 
+  // Debounce search input
   useEffect(() => {
-    getProducts({ page: 1, limit: 500 })
-      .then((res) => setProducts(res.data.data.products || []))
-      .finally(() => setLoading(false))
+    const t = setTimeout(() => setDebouncedSearch(search), 400)
+    return () => clearTimeout(t)
+  }, [search])
+
+  // Fetch low stock / out of stock global counts
+  const loadCounts = useCallback(() => {
+    getDashboardStats().then((res) => {
+      setStockCounts({
+        lowStock: res.data.data.lowStock || 0,
+        outOfStock: res.data.data.outOfStock || 0
+      })
+    }).catch((err) => {
+      console.error('Error fetching stock counts:', err)
+    })
   }, [])
+
+  const loadProducts = useCallback(
+    (page = 1) => {
+      setLoading(true)
+      const stockFilter = filter === 'Low Stock' ? 'low_stock' : filter === 'Out of Stock' ? 'out_of_stock' : undefined
+      getProducts({
+        page,
+        limit: LIMIT,
+        search: debouncedSearch || undefined,
+        stockFilter
+      })
+        .then((res) => {
+          setProducts(res.data.data.products || [])
+          setPagination(res.data.data.pagination || { total: 0, page: 1, totalPages: 1 })
+        })
+        .catch((err) => {
+          console.error('Error fetching inventory products:', err)
+        })
+        .finally(() => setLoading(false))
+    },
+    [debouncedSearch, filter]
+  )
+
+  useEffect(() => {
+    loadProducts(1)
+    loadCounts()
+  }, [loadProducts, loadCounts])
 
   const onSaved = (id, newQty) => {
     setProducts((prev) =>
       prev.map((p) => (p.id === id ? { ...p, stock_quantity: newQty } : p))
     )
-    setEditedIds((prev) => {
-      const next = new Set(prev)
-      next.add(id)
-      return next
-    })
+    loadCounts() // Reload counts to reflect stock changes globally
   }
-
-  const visible = products.filter((p) => {
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false
-    if (editedIds.has(p.id)) return true
-    if (filter === 'Low Stock' && !(p.stock_quantity > 0 && p.stock_quantity < 10)) return false
-    if (filter === 'Out of Stock' && p.stock_quantity !== 0) return false
-    return true
-  })
-
-  const outOf = products.filter((p) => p.stock_quantity === 0).length
-  const low = products.filter((p) => p.stock_quantity > 0 && p.stock_quantity < 10).length
-
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
 
   return (
     <div className="p-6">
@@ -128,37 +150,43 @@ export default function Inventory() {
         <h2 className="text-lg font-semibold text-gray-900">Inventory / Stock</h2>
         <input
           type="text"
-          placeholder="Search…"
+          placeholder="Search product name…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-40"
+          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-60"
         />
       </div>
 
-      {(outOf > 0 || low > 0) && (
+      {(stockCounts.outOfStock > 0 || stockCounts.lowStock > 0) && (
         <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-          {outOf > 0 && <span><strong>{outOf}</strong> out of stock. </span>}
-          {low > 0 && <span><strong>{low}</strong> running low (&lt;10 units).</span>}
+          {stockCounts.outOfStock > 0 && <span><strong>{stockCounts.outOfStock}</strong> out of stock. </span>}
+          {stockCounts.lowStock > 0 && <span><strong>{stockCounts.lowStock}</strong> running low (&lt;10 units).</span>}
         </div>
       )}
 
-      <div className="flex gap-1 mb-4">
-        {['All', 'Low Stock', 'Out of Stock'].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              filter === f
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex gap-1">
+          {['All', 'Low Stock', 'Out of Stock'].map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                filter === f
+                  ? 'bg-indigo-600 text-white'
+                  : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+
+        <div className="text-xs text-gray-500">
+          Showing {(pagination.page - 1) * LIMIT + 1} - {Math.min(pagination.page * LIMIT, pagination.total)} of {pagination.total} products
+        </div>
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -170,13 +198,52 @@ export default function Inventory() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {visible.map((p, index) => (
-              <StockRow key={p.id} product={p} sNo={index + 1} onSaved={onSaved} />
-            ))}
+            {loading ? (
+              <tr>
+                <td colSpan="7" className="text-center py-10 text-gray-400 text-sm">
+                  Loading inventory…
+                </td>
+              </tr>
+            ) : products.length === 0 ? (
+              <tr>
+                <td colSpan="7" className="text-center py-10 text-gray-400 text-sm">
+                  No products found
+                </td>
+              </tr>
+            ) : (
+              products.map((p, index) => (
+                <StockRow
+                  key={p.id}
+                  product={p}
+                  sNo={(pagination.page - 1) * LIMIT + index + 1}
+                  onSaved={onSaved}
+                />
+              ))
+            )}
           </tbody>
         </table>
-        {visible.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-10">No products found</p>
+
+        {/* Server-side Pagination Controls */}
+        {pagination.totalPages > 1 && (
+          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+            <button
+              onClick={() => loadProducts(pagination.page - 1)}
+              disabled={pagination.page === 1 || loading}
+              className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Previous
+            </button>
+            <div className="text-xs font-medium text-gray-700">
+              Page {pagination.page} of {pagination.totalPages}
+            </div>
+            <button
+              onClick={() => loadProducts(pagination.page + 1)}
+              disabled={pagination.page === pagination.totalPages || loading}
+              className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              Next
+            </button>
+          </div>
         )}
       </div>
     </div>

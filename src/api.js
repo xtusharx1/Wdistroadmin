@@ -30,6 +30,9 @@ export const resetPassword = (email, newPassword) =>
 export const resetShopPassword = (email, newPassword) =>
   http.post('/auth/shop/reset-password', { email, newPassword })
 
+// ── Dashboard ───────────────────────────────────────────────────────────────
+export const getDashboardStats = () => http.get('/dashboard/stats')
+
 // ── Users ───────────────────────────────────────────────────────────────────
 export const getUsers = () => http.get('/users')
 export const createUser = (data) => http.post('/users', data)

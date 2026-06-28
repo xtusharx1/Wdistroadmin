@@ -20,7 +20,103 @@ const getRequiredLicense = (mainCat) => {
   return (mainCat === 'Tobacco' || mainCat === 'Vape') ? 'Tobacco License' : 'Seller Permit'
 }
 
-const blankForm = { name: '', sku_id: '', mainCategory: 'General Merchandise', subCategory: 'Cables', price: '', purchaseCost: '', stock_quantity: '', image_url: '', description: '' }
+const mapCategoryFromText = (name, desc, mainCatInput, subCatInput) => {
+  const text = `${name || ''} ${desc || ''} ${mainCatInput || ''} ${subCatInput || ''}`.toLowerCase();
+  
+  // Vape matching
+  if (/\b(disposable|disposables|geek\s*bar|lost\s*mary|elf\s*bar|vuse|flum|fume|hqd|breeze|mr\s*fog|puff\s*bar|packspod|ebdesign|raz|viho|kadobar|oxbar|vaping)\b/.test(text)) {
+    return { mainCat: 'Vape', subCat: 'Disposable' };
+  }
+  if (/\b(juice|juices|liquid|e-liquid|eliquid|e-juice|ejuice|salt\s*nic|nic\s*salt|pod\s*juice)\b/.test(text)) {
+    return { mainCat: 'Vape', subCat: 'Juices' };
+  }
+  if (/\b(coil|coils|empty\s*pod|empty\s*pods|cartridge|cartridges)\b/.test(text)) {
+    return { mainCat: 'Vape', subCat: 'Vape Accessories' };
+  }
+  if (/\b(mod|vape\s*kit|starter\s*kit|vape\s*device|battery|vaporizer|tanks)\b/.test(text) || /\bvape\b/.test(text)) {
+    return { mainCat: 'Vape', subCat: 'Hardware' };
+  }
+
+  // Tobacco matching
+  if (/\b(wrap|wraps|hemp\s*wrap|hemp\s*wraps|fronto|grabba|loose\s*leaf|king\s*palm|zig\s*zag\s*wrap)\b/.test(text)) {
+    return { mainCat: 'Tobacco', subCat: 'Wraps' };
+  }
+  if (/\b(cigarillo|cigarillos|swisher|white\s*owl|dutch\s*masters|game\s*cigar)\b/.test(text)) {
+    return { mainCat: 'Tobacco', subCat: 'Cigarillos' };
+  }
+  if (/\b(cigar|cigars)\b/.test(text)) {
+    return { mainCat: 'Tobacco', subCat: 'Cigars' };
+  }
+  if (/\b(rolling\s*tobacco|pipe\s*tobacco|loose\s*tobacco)\b/.test(text)) {
+    return { mainCat: 'Tobacco', subCat: 'Rolling Tobacco' };
+  }
+  if (/\b(chew|chews|pouch|pouches|snus|dip|snuff|zyn|velo|rogue)\b/.test(text) || /\btobacco\b/.test(text)) {
+    return { mainCat: 'Tobacco', subCat: 'Chew/Pouches' };
+  }
+
+  // Rolling Papers matching
+  if (/\b(cone|cones|raw\s*cone|raw\s*cones|pre-rolled\s*cone)\b/.test(text)) {
+    return { mainCat: 'Rolling Papers', subCat: 'Cones' };
+  }
+  if (/\b(tip|tips|filter\s*tip|filter\s*tips|crutch|crutches)\b/.test(text)) {
+    return { mainCat: 'Rolling Papers', subCat: 'Tips' };
+  }
+  if (/\b(roller|rolling\s*machine|rolling\s*machines|joint\s*roller)\b/.test(text)) {
+    return { mainCat: 'Rolling Papers', subCat: 'Rolling Machine' };
+  }
+  if (/\b(paper|papers|rolling\s*paper|rolling\s*papers|raw|elements|ocb|zig\s*zag)\b/.test(text)) {
+    return { mainCat: 'Rolling Papers', subCat: 'Papers' };
+  }
+
+  // Glass matching
+  if (/\b(rig|rigs|dab\s*rig|bong|bongs|waterpipe|waterpipes|water\s*pipe|bubbler|recycler)\b/.test(text)) {
+    return { mainCat: 'Glass', subCat: 'Glass Rigs' };
+  }
+  if (/\b(bowl|bowls|slide|banger|bangers|downstem|downstems|ash\s*catcher|carb\s*cap|glass\s*screen|glass\s*pipe|glass\s*pipes|spoon\s*pipe|hand\s*pipe)\b/.test(text)) {
+    return { mainCat: 'Glass', subCat: 'Glass Accessories' };
+  }
+  if (/\b(grinder|grinders)\b/.test(text) || /\bglass\b/.test(text)) {
+    return { mainCat: 'Glass', subCat: 'Grinders' };
+  }
+
+  // Lighters matching
+  if (/\b(butane|butane\s*gas|refill)\b/.test(text)) {
+    return { mainCat: 'Lighters', subCat: 'Butane' };
+  }
+  if (/\b(pocket\s*torch|mini\s*torch)\b/.test(text)) {
+    return { mainCat: 'Lighters', subCat: 'Pocket Torches' };
+  }
+  if (/\b(high\s*flame|blowtorch)\b/.test(text)) {
+    return { mainCat: 'Lighters', subCat: 'High Flame' };
+  }
+  if (/\b(torch\s*lighter|torch\s*lighters)\b/.test(text)) {
+    return { mainCat: 'Lighters', subCat: 'Torch Lighters' };
+  }
+  if (/\b(lighter|lighters|clipper|bic|zippo)\b/.test(text)) {
+    return { mainCat: 'Lighters', subCat: 'Pocket Torches' };
+  }
+
+  // General Merchandise matching
+  if (/\b(cable|cables|charger|chargers|usb|type-c|lightning\s*cable|charging\s*cord)\b/.test(text)) {
+    return { mainCat: 'General Merchandise', subCat: 'Cables' };
+  }
+  if (/\b(toy|toys|plush|novelty)\b/.test(text)) {
+    return { mainCat: 'General Merchandise', subCat: 'Toys' };
+  }
+  if (/\b(clothing|t-shirt|tshirt|hoodie|cap|hat|socks|apparel)\b/.test(text)) {
+    return { mainCat: 'General Merchandise', subCat: 'Clothing' };
+  }
+  if (/\b(supplement|supplements|cbd|gummy|gummi|kratom|kava|nootropic|vitamins)\b/.test(text)) {
+    return { mainCat: 'General Merchandise', subCat: 'Supplements' };
+  }
+  if (/\b(medicine|otc|advil|tylenol|aspirin|ibuprofen|pain\s*relief|allergy)\b/.test(text)) {
+    return { mainCat: 'General Merchandise', subCat: 'Medicine (OTC)' };
+  }
+
+  return { mainCat: 'General Merchandise', subCat: 'Misc' };
+}
+
+const blankForm = { name: '', sku_id: '', mainCategory: 'General Merchandise', subCategory: 'Cables', price: '', purchaseCost: '', stock_quantity: '', image_url: '', description: '', is_active: true }
 
 export default function Products() {
   const user = getUser()
@@ -102,6 +198,7 @@ export default function Products() {
       stock_quantity: String(p.stock_quantity),
       image_url: p.image_url || '',
       description: p.description || '',
+      is_active: p.is_active !== false
     })
     setModalOpen(true)
   }
@@ -145,6 +242,7 @@ export default function Products() {
       stock_quantity: parseInt(form.stock_quantity, 10),
       image_url: form.image_url || undefined,
       description: form.description || undefined,
+      is_active: form.is_active,
       bypassDuplicateCheck: bypass
     }
     try {
@@ -190,7 +288,11 @@ export default function Products() {
         
         const mappedProducts = rows.map((row) => {
           const findVal = (keys) => {
-            const match = Object.keys(row).find(k => keys.includes(k.trim().toLowerCase()));
+            const normalizedKeys = keys.map(k => String(k).replace(/[^a-z0-9]/g, '').toLowerCase());
+            const match = Object.keys(row).find(k => {
+              const normK = String(k).replace(/[^a-z0-9]/g, '').toLowerCase();
+              return normalizedKeys.includes(normK);
+            });
             return match !== undefined ? row[match] : undefined;
           };
           
@@ -248,6 +350,12 @@ export default function Products() {
                 } else {
                   subCat = String(pSubCategory).trim();
                 }
+              } else {
+                // Main category matched, but subcategory is missing. Use keyword mapping to refine it.
+                const detected = mapCategoryFromText(pName, pDesc, pMainCategory, pSubCategory);
+                if (detected.mainCat === matchedKey) {
+                  subCat = detected.subCat;
+                }
               }
             } else {
               // Check if the main category column actually matches a subcategory
@@ -262,18 +370,32 @@ export default function Products() {
                 }
               }
               if (!foundMatch) {
-                mainCat = String(pMainCategory).trim();
-                subCat = pSubCategory ? String(pSubCategory).trim() : 'Misc';
+                // If it didn't match main or sub, try keyword detection
+                const detected = mapCategoryFromText(pName, pDesc, pMainCategory, pSubCategory);
+                if (detected.mainCat !== 'General Merchandise' || detected.subCat !== 'Misc') {
+                  mainCat = detected.mainCat;
+                  subCat = detected.subCat;
+                } else {
+                  mainCat = String(pMainCategory).trim();
+                  subCat = pSubCategory ? String(pSubCategory).trim() : 'Misc';
+                }
               }
             }
-          } else if (categoryFilter !== 'All') {
-            mainCat = categoryFilter;
-            subCat = CATEGORY_MAP[categoryFilter]?.[0] || 'Misc';
+          } else {
+            // No main category specified. Try keyword detection first
+            const detected = mapCategoryFromText(pName, pDesc, pMainCategory, pSubCategory);
+            if (detected.mainCat !== 'General Merchandise' || detected.subCat !== 'Misc') {
+              mainCat = detected.mainCat;
+              subCat = detected.subCat;
+            } else if (categoryFilter !== 'All') {
+              mainCat = categoryFilter;
+              subCat = CATEGORY_MAP[categoryFilter]?.[0] || 'Misc';
+            }
           }
           
           let parsedQty = 0;
           if (pQty !== undefined && pQty !== null && pQty !== '') {
-            const num = parseInt(pQty, 10);
+            const num = Math.round(Number(pQty));
             if (!isNaN(num)) {
               parsedQty = num;
             }
@@ -454,7 +576,16 @@ export default function Products() {
                         )}
                       </td>
                       <td className="px-4 py-2.5 text-gray-500 font-mono text-xs">{p.sku_id || '—'}</td>
-                      <td className="px-4 py-2.5 font-medium text-gray-900">{p.name}</td>
+                      <td className="px-4 py-2.5 font-medium text-gray-900">
+                        <div className="flex items-center gap-2">
+                          <span>{p.name}</span>
+                          {p.is_active === false && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-300">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-4 py-2.5 text-gray-500">
                         {p.main_category || 'General Merchandise'} &gt; {p.sub_category || 'Misc'}
                       </td>
@@ -622,6 +753,18 @@ export default function Products() {
                   placeholder="Enter product description..."
                 />
               </Field>
+            </div>
+            <div className="col-span-2 flex items-center gap-2 py-1">
+              <input
+                type="checkbox"
+                id="is_active"
+                checked={form.is_active}
+                onChange={(e) => setForm({ ...form, is_active: e.target.checked })}
+                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+              />
+              <label htmlFor="is_active" className="text-sm font-medium text-gray-700">
+                Product is active (visible to customers for ordering)
+              </label>
             </div>
           </div>
           <Field label="Product Image">
