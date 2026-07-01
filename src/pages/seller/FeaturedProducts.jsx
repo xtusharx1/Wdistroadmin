@@ -19,10 +19,6 @@ export default function FeaturedProducts() {
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState(null)
 
-  // Inline order editing
-  const [editingOrder, setEditingOrder] = useState(null) // { id, value }
-  const [savingOrder, setSavingOrder] = useState(null)
-
   const debounceRef = useRef(null)
 
   const loadFeatured = useCallback(async () => {
@@ -91,34 +87,10 @@ export default function FeaturedProducts() {
 
   const handleRemove = async (id) => {
     try {
-      await updateProduct(id, { is_featured: false, featured_order: null })
+      await updateProduct(id, { is_featured: false })
       await loadFeatured()
     } catch {
       setError('Failed to remove product from featured.')
-    }
-  }
-
-  const startEditOrder = (product) => {
-    setEditingOrder({ id: product.id, value: product.featured_order !== null && product.featured_order !== undefined ? String(product.featured_order) : '' })
-  }
-
-  const handleSaveOrder = async (id) => {
-    if (!editingOrder) return
-    const raw = editingOrder.value.trim()
-    const parsed = raw === '' ? null : parseInt(raw, 10)
-    if (raw !== '' && (isNaN(parsed) || parsed < 1)) {
-      setEditingOrder(prev => ({ ...prev, value: raw }))
-      return
-    }
-    setSavingOrder(id)
-    try {
-      await updateProduct(id, { featured_order: parsed })
-      setEditingOrder(null)
-      await loadFeatured()
-    } catch {
-      setError('Failed to update display order.')
-    } finally {
-      setSavingOrder(null)
     }
   }
 
@@ -161,7 +133,6 @@ export default function FeaturedProducts() {
           <table className="min-w-full text-sm" style={{ minWidth: '700px' }}>
             <thead className="bg-gray-50 border-b border-gray-200">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Display Order</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">Image</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Product Name</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">SKU</th>
@@ -176,50 +147,6 @@ export default function FeaturedProducts() {
             <tbody className="divide-y divide-gray-100 bg-white">
               {featured.map(product => (
                 <tr key={product.id} className="hover:bg-gray-50">
-                  {/* Display Order — inline editable */}
-                  <td className="px-4 py-3">
-                    {editingOrder?.id === product.id ? (
-                      <div className="flex items-center gap-1.5">
-                        <input
-                          type="number"
-                          min="1"
-                          value={editingOrder.value}
-                          onChange={e => setEditingOrder(prev => ({ ...prev, value: e.target.value }))}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') handleSaveOrder(product.id)
-                            if (e.key === 'Escape') setEditingOrder(null)
-                          }}
-                          className="w-16 border border-indigo-400 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => handleSaveOrder(product.id)}
-                          disabled={savingOrder === product.id}
-                          className="text-xs px-2 py-1 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:opacity-50"
-                        >
-                          {savingOrder === product.id ? '…' : 'Save'}
-                        </button>
-                        <button
-                          onClick={() => setEditingOrder(null)}
-                          className="text-xs px-2 py-1 text-gray-500 hover:text-gray-700"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => startEditOrder(product)}
-                        className="flex items-center gap-1.5 group"
-                        title="Click to edit display order"
-                      >
-                        <span className="font-semibold text-gray-700">
-                          {product.featured_order !== null && product.featured_order !== undefined ? product.featured_order : '—'}
-                        </span>
-                        <span className="text-gray-300 group-hover:text-indigo-500 text-xs">✎</span>
-                      </button>
-                    )}
-                  </td>
-
                   {/* Image */}
                   <td className="px-4 py-3">
                     {product.image_url ? (
