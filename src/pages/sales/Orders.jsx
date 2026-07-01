@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getUser } from '../../auth'
-import { getSalesAssignments, getOrders, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder } from '../../api'
+import { getSalesAssignments, getOrders, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import Modal from '../../components/Modal'
 
@@ -26,6 +26,13 @@ export default function SalesOrders() {
   
   const [processModal, setProcessModal] = useState(null)
   const [updatingStatus, setUpdatingStatus] = useState(null)
+  const [settling, setSettling] = useState(false)
+  const [showSettleForm, setShowSettleForm] = useState(false)
+  const [settleMethod, setSettleMethod] = useState('')
+  const [settleAmount, setSettleAmount] = useState('')
+  const [settleRefNo, setSettleRefNo] = useState('')
+  const [settleRemarks, setSettleRemarks] = useState('')
+  const [payments, setPayments] = useState([])
 
   const fetchData = () => {
     Promise.all([getSalesAssignments(), getOrders()]).then(([aRes, oRes]) => {
@@ -50,14 +57,25 @@ export default function SalesOrders() {
   }, [me?.id])
 
   useEffect(() => {
+    setShowSettleForm(false)
+    setSettleMethod('')
+    setSettleAmount('')
+    setSettleRefNo('')
+    setSettleRemarks('')
+    setPayments([])
     if (detail) {
       setLoadingInvoice(true)
       getInvoice(detail.id)
-        .then((res) => setInvoice(res.data.data.invoice))
-        .catch(() => setInvoice(null))
+        .then((res) => {
+          const inv = res.data.data.invoice
+          setInvoice(inv)
+          setPayments(inv?.PaymentHistory || [])
+        })
+        .catch(() => { setInvoice(null); setPayments([]) })
         .finally(() => setLoadingInvoice(false))
     } else {
       setInvoice(null)
+      setPayments([])
     }
   }, [detail])
 
@@ -86,6 +104,40 @@ export default function SalesOrders() {
       alert(err.response?.data?.message || 'Failed to regenerate invoice.')
     } finally {
       setGeneratingInvoice(false)
+    }
+  }
+
+  const handleSettle = async () => {
+    if (!settleMethod) { alert('Please select a payment method.'); return }
+    const parsedAmount = parseFloat(settleAmount)
+    if (!settleAmount || isNaN(parsedAmount) || parsedAmount <= 0) {
+      alert('Please enter a valid payment amount.'); return
+    }
+    const remaining = invoice.final_amount - (Number(invoice.total_paid_amount) || 0)
+    if (parsedAmount > remaining + 0.005) {
+      alert(`Payment exceeds remaining balance ($${remaining.toFixed(2)}).`); return
+    }
+    setSettling(true)
+    try {
+      const res = await addInvoicePayment(invoice.id, {
+        payment_method: settleMethod,
+        payment_amount: parsedAmount,
+        ...(settleRefNo && { payment_reference_no: settleRefNo }),
+        ...(settleRemarks && { remarks: settleRemarks }),
+      })
+      const updatedInvoice = res.data.data.invoice
+      setInvoice(updatedInvoice)
+      setPayments(updatedInvoice?.PaymentHistory || [])
+      setShowSettleForm(false)
+      setSettleMethod('')
+      setSettleAmount('')
+      setSettleRefNo('')
+      setSettleRemarks('')
+      alert(res.data.message || 'Payment recorded.')
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to record payment.')
+    } finally {
+      setSettling(false)
     }
   }
 
@@ -316,60 +368,196 @@ export default function SalesOrders() {
 
             {/* Invoice Section */}
             {(detail.status === 'dispatched' || detail.status === 'delivered' || detail.status === 'completed') && (
-              <div className="mt-4 mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
-                <div>
-                  <h4 className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
-                    <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                    </svg>
-                    Invoice Management
-                  </h4>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {loadingInvoice ? 'Checking invoice status...' :
-                      invoice ? `Invoice #${invoice.id} generated on ${new Date(invoice.generated_at).toLocaleDateString('en-IN')}` :
-                        'No invoice generated for this order yet.'}
-                  </p>
-                </div>
-                <div className="flex gap-2">
-                  {loadingInvoice ? (
-                    <span className="text-xs text-gray-400">Loading...</span>
-                  ) : invoice?.pdf_url ? (
-                    <>
-                      <a
-                        href={invoice.pdf_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors"
-                      >
-                        View Invoice
-                      </a>
-                      <a
-                        href={invoice.pdf_url}
-                        download={`invoice-${detail.id}.pdf`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs px-3 py-1.5 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-colors"
-                      >
-                        Download Invoice
-                      </a>
+              <div className="mt-4 mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
+                      <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      Invoice Management
+                    </h4>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {loadingInvoice ? 'Checking invoice status...' :
+                        invoice ? `Invoice #${invoice.id} · ` : 'No invoice generated for this order yet.'}
+                      {invoice && (() => {
+                        const s = invoice.payment_status
+                        const isPaid = s === 'paid' || s === 'settled'
+                        const isPartial = s === 'partially_paid'
+                        return (
+                          <span className={`inline-flex items-center text-xs px-2 py-0.5 rounded-full font-medium border ${
+                            isPaid ? 'bg-green-50 text-green-700 border-green-200'
+                            : isPartial ? 'bg-orange-50 text-orange-700 border-orange-200'
+                            : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                          }`}>
+                            {isPaid ? '✓ Paid' : isPartial ? '~ Partially Paid' : 'Unsettled'}
+                          </span>
+                        )
+                      })()}
+                      {invoice && (invoice.payment_status === 'paid' || invoice.payment_status === 'settled') ? null : invoice && (
+                        <span className="ml-2 text-gray-400">
+                          Paid: {fmt(invoice.total_paid_amount || 0)} · Balance: {fmt((invoice.final_amount || 0) - (invoice.total_paid_amount || 0))}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 flex-wrap justify-end flex-shrink-0">
+                    {loadingInvoice ? (
+                      <span className="text-xs text-gray-400">Loading...</span>
+                    ) : invoice?.pdf_url ? (
+                      <>
+                        <a
+                          href={invoice.pdf_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors"
+                        >
+                          View Invoice
+                        </a>
+                        <a
+                          href={invoice.pdf_url}
+                          download={`invoice-${detail.id}.pdf`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs px-3 py-1.5 rounded border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 font-medium transition-colors"
+                        >
+                          Download
+                        </a>
+                        <button
+                          onClick={handleInvoiceRegeneration}
+                          disabled={generatingInvoice}
+                          className="text-xs px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50 transition-colors"
+                        >
+                          {generatingInvoice ? 'Regenerating...' : 'Regenerate'}
+                        </button>
+                        {invoice.payment_status !== 'paid' && invoice.payment_status !== 'settled' && !showSettleForm && (
+                          <button
+                            onClick={() => setShowSettleForm(true)}
+                            className="text-xs px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white font-medium transition-colors"
+                          >
+                            {invoice.payment_status === 'partially_paid' ? 'Record Payment' : 'Settle Transaction'}
+                          </button>
+                        )}
+                      </>
+                    ) : (
                       <button
-                        onClick={handleInvoiceRegeneration}
+                        onClick={handleInvoiceGeneration}
                         disabled={generatingInvoice}
-                        className="text-xs px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50 transition-colors"
+                        className="text-xs px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium disabled:opacity-50 transition-colors"
                       >
-                        {generatingInvoice ? 'Regenerating...' : 'Regenerate'}
+                        {generatingInvoice ? 'Generating...' : 'Generate Invoice'}
                       </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={handleInvoiceGeneration}
-                      disabled={generatingInvoice}
-                      className="text-xs px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium disabled:opacity-50 transition-colors"
-                    >
-                      {generatingInvoice ? 'Generating...' : 'Generate Invoice'}
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
+
+                {/* Payment history — shown when payments exist */}
+                {payments.length > 0 && !showSettleForm && (
+                  <div className="mt-3 pt-3 border-t border-gray-200">
+                    <p className="text-xs font-semibold text-gray-600 mb-2">Payment History</p>
+                    <div className="border border-gray-200 rounded-md overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            {['Date', 'Method', 'Amount', 'Ref No', 'By', 'Remarks'].map((h) => (
+                              <th key={h} className="px-2 py-1.5 text-left font-medium text-gray-500">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {payments.map((p) => (
+                            <tr key={p.id}>
+                              <td className="px-2 py-2 text-gray-600">{new Date(p.verified_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                              <td className="px-2 py-2 font-medium">{p.payment_method === 'MO' ? 'Money Order' : p.payment_method}</td>
+                              <td className="px-2 py-2 font-semibold text-green-700">{fmt(p.payment_amount)}</td>
+                              <td className="px-2 py-2 font-mono text-gray-500">{p.payment_reference_no || '—'}</td>
+                              <td className="px-2 py-2 text-gray-600">{p.VerifiedBy?.name || `User #${p.verified_by_user_id}` || '—'}</td>
+                              <td className="px-2 py-2 text-gray-500 max-w-[120px] truncate">{p.remarks || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {/* Record Payment form */}
+                {showSettleForm && (
+                  <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
+                    <p className="text-xs font-semibold text-gray-700">Record Payment
+                      {invoice && (
+                        <span className="ml-2 font-normal text-gray-400">
+                          Remaining: {fmt((invoice.final_amount || 0) - (invoice.total_paid_amount || 0))}
+                        </span>
+                      )}
+                    </p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-gray-500 font-medium block mb-1">Payment Method <span className="text-red-500">*</span></label>
+                        <select
+                          value={settleMethod}
+                          onChange={(e) => setSettleMethod(e.target.value)}
+                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        >
+                          <option value="">Select…</option>
+                          <option value="Cash">Cash</option>
+                          <option value="Card">Card</option>
+                          <option value="Check">Check</option>
+                          <option value="MO">Money Order (MO)</option>
+                          <option value="Adjusted">Adjusted</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 font-medium block mb-1">Payment Amount <span className="text-red-500">*</span></label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          max={invoice ? invoice.final_amount - (invoice.total_paid_amount || 0) : undefined}
+                          value={settleAmount}
+                          onChange={(e) => setSettleAmount(e.target.value)}
+                          placeholder={invoice ? `Max ${fmt(invoice.final_amount - (invoice.total_paid_amount || 0))}` : '0.00'}
+                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 font-medium block mb-1">Payment Ref No</label>
+                        <input
+                          type="text"
+                          value={settleRefNo}
+                          onChange={(e) => setSettleRefNo(e.target.value)}
+                          placeholder="e.g. CHK-12345"
+                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-gray-500 font-medium block mb-1">Remarks</label>
+                        <input
+                          type="text"
+                          value={settleRemarks}
+                          onChange={(e) => setSettleRemarks(e.target.value)}
+                          placeholder="Any notes…"
+                          className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSettle}
+                        disabled={settling || !settleMethod || !settleAmount}
+                        className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white font-medium py-1.5 text-xs rounded-md transition-colors"
+                      >
+                        {settling ? 'Saving…' : 'Record Payment'}
+                      </button>
+                      <button
+                        onClick={() => setShowSettleForm(false)}
+                        className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium py-1.5 rounded-md"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

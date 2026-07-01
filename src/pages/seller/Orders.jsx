@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { getOrders, processOrder, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, getShops } from '../../api'
+import { useState, useEffect, useCallback } from 'react'
+import { getOrders, processOrder, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, getShops, editOrder, getProducts } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import Modal from '../../components/Modal'
 
@@ -7,6 +7,7 @@ const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
 
 const FILTERS = ['All', 'pending', 'approved', 'dispatched', 'delivered']
+const EDITABLE_STATUSES = ['pending', 'approved', 'processed']
 
 export default function SellerOrders() {
   const [orders, setOrders] = useState([])
@@ -21,6 +22,16 @@ export default function SellerOrders() {
   const [invoice, setInvoice] = useState(null)
   const [loadingInvoice, setLoadingInvoice] = useState(false)
   const [generating, setGenerating] = useState(false)
+
+  // Edit Order modal state
+  const [editModal, setEditModal] = useState(null)
+  const [editSaving, setEditSaving] = useState(false)
+  const [addSearch, setAddSearch] = useState('')
+  const [addResults, setAddResults] = useState([])
+  const [addLoading, setAddLoading] = useState(false)
+  const [addSelected, setAddSelected] = useState(null)
+  const [addQty, setAddQty] = useState(1)
+  const [addPrice, setAddPrice] = useState('')
 
   const notify = (text, type = 'success') => {
     setMsg({ text, type })
@@ -49,6 +60,28 @@ export default function SellerOrders() {
       })
       .finally(() => setLoadingInvoice(false))
   }, [detailModal])
+
+  // Product search for "Add Product" panel in edit modal
+  useEffect(() => {
+    if (!editModal || addSearch.trim().length < 2) {
+      setAddResults([])
+      return
+    }
+    const timer = setTimeout(async () => {
+      setAddLoading(true)
+      try {
+        const res = await getProducts({ search: addSearch.trim(), limit: 8 })
+        const products = res.data.data.products || []
+        const draftIds = new Set((editModal.items || []).map(i => i.product_id))
+        setAddResults(products.filter(p => !draftIds.has(p.id)))
+      } catch {
+        setAddResults([])
+      } finally {
+        setAddLoading(false)
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [addSearch, editModal?.items])
 
   const handleInvoiceGeneration = async () => {
     setGenerating(true)
@@ -97,6 +130,132 @@ export default function SellerOrders() {
       })),
     })
   }
+
+  // ── Edit Order ─────────────────────────────────────────────────────────────
+
+  const openEdit = (order) => {
+    setEditModal({
+      order,
+      items: (order.OrderItems || []).map((item) => ({
+        product_id: item.product_id,
+        product_name: item.Product?.name || `Product #${item.product_id}`,
+        product_sku: item.Product?.sku_id || '',
+        product_price: item.Product?.price ?? item.price,
+        product_stock: item.Product?.stock_quantity ?? 0,
+        quantity: order.status === 'pending' ? item.requested_qty : (item.approved_qty || item.requested_qty),
+        custom_price: item.custom_price != null ? String(item.custom_price) : ''
+      }))
+    })
+    setAddSearch('')
+    setAddResults([])
+    setAddSelected(null)
+    setAddQty(1)
+    setAddPrice('')
+  }
+
+  const closeEdit = () => {
+    setEditModal(null)
+    setAddSearch('')
+    setAddResults([])
+    setAddSelected(null)
+    setAddQty(1)
+    setAddPrice('')
+  }
+
+  const updateEditQty = (product_id, qty) => {
+    setEditModal(prev => ({
+      ...prev,
+      items: prev.items.map(i =>
+        i.product_id === product_id ? { ...i, quantity: Math.max(1, Number(qty) || 1) } : i
+      )
+    }))
+  }
+
+  const updateEditPrice = (product_id, price) => {
+    setEditModal(prev => ({
+      ...prev,
+      items: prev.items.map(i =>
+        i.product_id === product_id ? { ...i, custom_price: price } : i
+      )
+    }))
+  }
+
+  const removeEditItem = (product_id) => {
+    setEditModal(prev => ({
+      ...prev,
+      items: prev.items.filter(i => i.product_id !== product_id)
+    }))
+  }
+
+  const selectAddProduct = (product) => {
+    setAddSelected(product)
+    setAddSearch(product.name)
+    setAddResults([])
+    setAddQty(1)
+    setAddPrice('')
+  }
+
+  const addProductToEdit = () => {
+    if (!addSelected) return
+    if (editModal.items.find(i => i.product_id === addSelected.id)) {
+      notify('Product is already in the order. Update quantity in its existing row.', 'error')
+      return
+    }
+    const qty = Math.max(1, parseInt(addQty) || 1)
+    setEditModal(prev => ({
+      ...prev,
+      items: [...prev.items, {
+        product_id: addSelected.id,
+        product_name: addSelected.name,
+        product_sku: addSelected.sku_id || '',
+        product_price: addSelected.price,
+        product_stock: addSelected.stock_quantity ?? 0,
+        quantity: qty,
+        custom_price: addPrice
+      }]
+    }))
+    setAddSelected(null)
+    setAddSearch('')
+    setAddResults([])
+    setAddQty(1)
+    setAddPrice('')
+  }
+
+  const submitEdit = async () => {
+    if (!editModal || editModal.items.length === 0) {
+      notify('Order must have at least one product.', 'error')
+      return
+    }
+    setEditSaving(true)
+    try {
+      await editOrder(
+        editModal.order.id,
+        editModal.items.map(item => ({
+          product_id: item.product_id,
+          quantity: item.quantity,
+          custom_price: item.custom_price !== '' && !isNaN(parseFloat(item.custom_price))
+            ? parseFloat(item.custom_price)
+            : null
+        }))
+      )
+      notify('Order updated successfully.')
+      closeEdit()
+      refresh()
+    } catch (err) {
+      notify(err.response?.data?.message || 'Failed to update order.', 'error')
+    } finally {
+      setEditSaving(false)
+    }
+  }
+
+  const editDraftTotal = (editModal?.items || []).reduce((sum, item) => {
+    const price = item.custom_price !== '' && !isNaN(parseFloat(item.custom_price))
+      ? parseFloat(item.custom_price)
+      : item.product_price
+    return sum + price * item.quantity
+  }, 0)
+
+  // ── Process modal handlers ─────────────────────────────────────────────────
 
   const updateItemQty = (itemId, qty) => {
     setProcessModal((prev) => ({
@@ -269,6 +428,14 @@ export default function SellerOrders() {
                         Mark Delivered
                       </button>
                     )}
+                    {EDITABLE_STATUSES.includes(o.status) && (
+                      <button
+                        onClick={() => openEdit(o)}
+                        className="text-xs px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-600 text-white font-medium transition-colors"
+                      >
+                        Edit
+                      </button>
+                    )}
                     {(o.status === 'approved' || o.status === 'dispatched' || o.status === 'delivered') && (
                       <button
                         onClick={() => setDetailModal(o)}
@@ -323,7 +490,7 @@ export default function SellerOrders() {
                   Invoice Management
                 </h4>
                 <p className="text-xs text-gray-500 mt-1">
-                  {loadingInvoice ? 'Checking invoice status...' : 
+                  {loadingInvoice ? 'Checking invoice status...' :
                    invoice ? `Invoice #${invoice.id} generated on ${new Date(invoice.generated_at).toLocaleDateString('en-IN')}` :
                    'No invoice generated for this order yet.'}
                 </p>
@@ -491,6 +658,196 @@ export default function SellerOrders() {
               <button
                 onClick={() => setProcessModal(null)}
                 className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-md"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit Order Modal */}
+      <Modal
+        open={!!editModal}
+        onClose={closeEdit}
+        title={`Edit Order WS-${editModal?.order.id}`}
+        size="xl"
+      >
+        {editModal && (
+          <div>
+            {/* Order context bar */}
+            <div className="flex items-center gap-4 mb-5 pb-4 border-b border-gray-100 text-sm">
+              <div>
+                <span className="text-xs text-gray-400 uppercase tracking-wide mr-1.5">Store</span>
+                <span className="font-medium">{storeMap[editModal.order.shop_id] || `Store #${editModal.order.shop_id}`}</span>
+              </div>
+              <div>
+                <span className="text-xs text-gray-400 uppercase tracking-wide mr-1.5">Status</span>
+                <StatusBadge status={editModal.order.status} />
+              </div>
+              <div className="ml-auto text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded px-2.5 py-1">
+                Changes are held in draft — nothing saves until you click <strong>Save Changes</strong>
+              </div>
+            </div>
+
+            {/* Current items table */}
+            <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Order Items</h3>
+            {editModal.items.length === 0 ? (
+              <p className="text-sm text-gray-400 italic mb-4">No items. Add at least one product below.</p>
+            ) : (
+              <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden mb-4">
+                <thead className="bg-gray-50">
+                  <tr>
+                    {['Product', 'List Price', 'Selling Price', 'Qty', 'Subtotal', ''].map((h) => (
+                      <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {editModal.items.map((item) => {
+                    const effectivePrice = item.custom_price !== '' && !isNaN(parseFloat(item.custom_price))
+                      ? parseFloat(item.custom_price)
+                      : item.product_price
+                    return (
+                      <tr key={item.product_id}>
+                        <td className="px-3 py-2.5">
+                          <p className="font-medium text-gray-900">{item.product_name}</p>
+                          {item.product_sku && <p className="text-xs text-gray-400">{item.product_sku}</p>}
+                          {editModal.order.status !== 'pending' && (
+                            <p className="text-xs text-gray-400">Stock: {item.product_stock}</p>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-gray-500">{fmt(item.product_price)}</td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.custom_price}
+                            placeholder={`${item.product_price}`}
+                            onChange={(e) => updateEditPrice(item.product_id, e.target.value)}
+                            className="w-28 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <input
+                            type="number"
+                            min="1"
+                            value={item.quantity}
+                            onChange={(e) => updateEditQty(item.product_id, e.target.value)}
+                            className="w-20 border border-gray-300 rounded px-2 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          />
+                        </td>
+                        <td className="px-3 py-2.5 font-medium">{fmt(effectivePrice * item.quantity)}</td>
+                        <td className="px-3 py-2.5">
+                          <button
+                            onClick={() => removeEditItem(item.product_id)}
+                            className="text-red-400 hover:text-red-600 transition-colors text-lg leading-none"
+                            title="Remove product"
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
+
+            {/* Add Product panel */}
+            <div className="border border-dashed border-gray-300 rounded-lg p-4 mb-5 bg-gray-50">
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Add Product</h3>
+              <div className="flex gap-2 flex-wrap items-start">
+                <div className="flex-1 min-w-48 relative">
+                  <input
+                    type="text"
+                    value={addSearch}
+                    onChange={(e) => { setAddSearch(e.target.value); setAddSelected(null) }}
+                    placeholder="Search by product name…"
+                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  {(addLoading || addResults.length > 0) && (
+                    <div className="absolute z-10 top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                      {addLoading && (
+                        <p className="text-xs text-gray-400 px-3 py-2">Searching…</p>
+                      )}
+                      {!addLoading && addResults.map(p => (
+                        <button
+                          key={p.id}
+                          onClick={() => selectAddProduct(p)}
+                          className="w-full text-left px-3 py-2 hover:bg-indigo-50 text-sm border-b border-gray-100 last:border-0"
+                        >
+                          <span className="font-medium text-gray-900">{p.name}</span>
+                          {p.sku_id && <span className="ml-2 text-xs text-gray-400">{p.sku_id}</span>}
+                          <span className="ml-2 text-xs text-indigo-600">{fmt(p.price)}</span>
+                          <span className={`ml-2 text-xs ${p.stock_quantity > 0 ? 'text-green-600' : 'text-red-500'}`}>
+                            {p.stock_quantity > 0 ? `${p.stock_quantity} in stock` : 'Out of stock'}
+                          </span>
+                        </button>
+                      ))}
+                      {!addLoading && addResults.length === 0 && addSearch.trim().length >= 2 && (
+                        <p className="text-xs text-gray-400 px-3 py-2">No products found</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  value={addQty}
+                  onChange={(e) => setAddQty(e.target.value)}
+                  placeholder="Qty"
+                  className="w-20 border border-gray-300 rounded px-2 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={addPrice}
+                  onChange={(e) => setAddPrice(e.target.value)}
+                  placeholder="Price (optional)"
+                  className="w-36 border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                />
+                <button
+                  onClick={addProductToEdit}
+                  disabled={!addSelected}
+                  className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white text-sm font-medium transition-colors"
+                >
+                  + Add
+                </button>
+              </div>
+              {addSelected && (
+                <p className="mt-2 text-xs text-indigo-600">
+                  Selected: <strong>{addSelected.name}</strong> — {fmt(addSelected.price)} — {addSelected.stock_quantity} in stock
+                </p>
+              )}
+            </div>
+
+            {/* Draft total + actions */}
+            <div className="flex items-center justify-between py-3 border-t border-gray-200 mb-4">
+              <div>
+                <span className="text-sm text-gray-500">Original Total: </span>
+                <span className="text-sm font-medium text-gray-600 line-through">{fmt(editModal.order.total_amount)}</span>
+              </div>
+              <div>
+                <span className="text-sm text-gray-500 mr-2">Draft Total:</span>
+                <span className="text-xl font-bold text-amber-700">{fmt(editDraftTotal)}</span>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={submitEdit}
+                disabled={editSaving || editModal.items.length === 0}
+                className="flex-1 bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white font-semibold py-2 text-sm rounded-md transition-colors"
+              >
+                {editSaving ? 'Saving…' : 'Save Changes'}
+              </button>
+              <button
+                onClick={closeEdit}
+                disabled={editSaving}
+                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-md transition-colors"
               >
                 Cancel
               </button>

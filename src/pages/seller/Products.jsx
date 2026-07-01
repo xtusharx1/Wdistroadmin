@@ -116,7 +116,7 @@ const mapCategoryFromText = (name, desc, mainCatInput, subCatInput) => {
   return { mainCat: 'General Merchandise', subCat: 'Misc' };
 }
 
-const blankForm = { name: '', sku_id: '', mainCategory: '', subCategory: '', price: '', purchaseCost: '', stock_quantity: '', image_url: '', description: '', is_active: true }
+const blankForm = { name: '', sku_id: '', mainCategory: '', subCategory: '', price: '', purchaseCost: '', stock_quantity: '', image_url: '', description: '', is_active: true, is_clearance: false, clearance_price: '' }
 
 export default function Products() {
   const user = getUser()
@@ -131,6 +131,7 @@ export default function Products() {
   const [sortOrder, setSortOrder] = useState('desc')
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState(null)
+  const [clearanceFilter, setClearanceFilter] = useState('All') // 'All' | 'Clearance' | 'Regular'
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -165,7 +166,8 @@ export default function Products() {
         mainCategory: categoryFilter !== 'All' ? categoryFilter : undefined,
         subCategory: subCategoryFilter !== 'All' ? subCategoryFilter : undefined,
         sortBy,
-        sortOrder
+        sortOrder,
+        clearance: clearanceFilter === 'Clearance' ? 'true' : clearanceFilter === 'Regular' ? 'false' : undefined
       })
         .then((res) => {
           setProducts(res.data.data.products || [])
@@ -173,7 +175,7 @@ export default function Products() {
         })
         .finally(() => setLoading(false))
     },
-    [debouncedSearch, categoryFilter, subCategoryFilter, sortBy, sortOrder]
+    [debouncedSearch, categoryFilter, subCategoryFilter, sortBy, sortOrder, clearanceFilter]
   )
 
   useEffect(() => { load(1) }, [load])
@@ -199,7 +201,9 @@ export default function Products() {
       stock_quantity: String(p.stock_quantity),
       image_url: p.image_url || '',
       description: p.description || '',
-      is_active: p.is_active !== false
+      is_active: p.is_active !== false,
+      is_clearance: p.is_clearance === true,
+      clearance_price: p.clearance_price != null ? String(p.clearance_price) : ''
     })
     setMsg(null)
     setModalOpen(true)
@@ -232,6 +236,21 @@ export default function Products() {
 
   const handleSubmit = async (e, bypass = false) => {
     if (e) e.preventDefault()
+
+    // Front-end validation for clearance fields
+    if (form.is_clearance) {
+      const cp = parseFloat(form.clearance_price)
+      const rp = parseFloat(form.price)
+      if (!form.clearance_price || isNaN(cp) || cp <= 0) {
+        notify('Clearance price must be greater than zero.', 'error')
+        return
+      }
+      if (cp >= rp) {
+        notify('Clearance price must be less than the regular selling price.', 'error')
+        return
+      }
+    }
+
     setSaving(true)
     const payload = {
       name: form.name,
@@ -245,7 +264,9 @@ export default function Products() {
       image_url: form.image_url || undefined,
       description: form.description || undefined,
       is_active: form.is_active,
-      bypassDuplicateCheck: bypass
+      bypassDuplicateCheck: bypass,
+      is_clearance: form.is_clearance,
+      clearance_price: form.is_clearance && form.clearance_price !== '' ? parseFloat(form.clearance_price) : null
     }
     try {
       if (editing) {
@@ -516,6 +537,24 @@ export default function Products() {
         ))}
       </div>
 
+      {/* Clearance filter row */}
+      <div className="flex gap-1.5 mb-4">
+        {['All', 'Clearance', 'Regular'].map((opt) => (
+          <button
+            key={opt}
+            onClick={() => setClearanceFilter(opt)}
+            className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
+              clearanceFilter === opt
+                ? opt === 'Clearance'
+                  ? 'bg-orange-500 text-white'
+                  : 'bg-indigo-600 text-white'
+                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
+            }`}
+          >
+            {opt === 'Clearance' ? '🏷 Clearance' : opt}
+          </button>
+        ))}
+      </div>
       {categoryFilter !== 'All' && CATEGORY_MAP[categoryFilter] && (
         <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1.5 border-b border-gray-100">
           {['All', ...CATEGORY_MAP[categoryFilter]].map((sub) => (
@@ -533,6 +572,7 @@ export default function Products() {
           ))}
         </div>
       )}
+
 
       {msg && (
         <div
@@ -580,8 +620,13 @@ export default function Products() {
                       </td>
                       <td className="px-4 py-2.5 text-gray-500 font-mono text-xs">{p.sku_id || '—'}</td>
                       <td className="px-4 py-2.5 font-medium text-gray-900">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span>{p.name}</span>
+                          {p.is_clearance && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-orange-100 text-orange-700 border border-orange-300 uppercase tracking-wide">
+                              Clearance
+                            </span>
+                          )}
                           {p.is_active === false && (
                             <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-gray-100 text-gray-600 border border-gray-300">
                               Inactive
@@ -593,7 +638,16 @@ export default function Products() {
                         {p.main_category || 'General Merchandise'} &gt; {p.sub_category || 'Misc'}
                       </td>
                       {isAdmin && <td className="px-4 py-2.5 text-gray-500 font-medium">{p.purchase_cost ? fmt(p.purchase_cost) : '—'}</td>}
-                      <td className="px-4 py-2.5 font-medium">{fmt(p.price)}</td>
+                      <td className="px-4 py-2.5 font-medium">
+                        {p.is_clearance && p.clearance_price != null ? (
+                          <div className="flex flex-col">
+                            <span className="line-through text-gray-400 text-xs">{fmt(p.price)}</span>
+                            <span className="text-orange-600 font-semibold">{fmt(p.clearance_price)}</span>
+                          </div>
+                        ) : (
+                          fmt(p.price)
+                        )}
+                      </td>
                       <td className="px-4 py-2.5">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${stockColor(p.stock_quantity)}`}>
                           {p.stock_quantity}
@@ -776,6 +830,36 @@ export default function Products() {
                 Product is active (visible to customers for ordering)
               </label>
             </div>
+
+            {/* Clearance toggle */}
+            <div className="col-span-2 flex items-center gap-2 py-1">
+              <input
+                type="checkbox"
+                id="is_clearance"
+                checked={form.is_clearance}
+                onChange={(e) => setForm({ ...form, is_clearance: e.target.checked, clearance_price: e.target.checked ? form.clearance_price : '' })}
+                className="rounded border-gray-300 text-orange-500 focus:ring-orange-400 h-4 w-4"
+              />
+              <label htmlFor="is_clearance" className="text-sm font-medium text-gray-700">
+                🏷 Clearance Product
+              </label>
+            </div>
+
+            {/* Clearance Price — only visible when is_clearance is checked */}
+            {form.is_clearance && (
+              <Field label="Clearance Price ($)" required>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={form.clearance_price}
+                  onChange={(e) => setForm({ ...form, clearance_price: e.target.value })}
+                  required
+                  className={input}
+                  placeholder="Enter clearance / sale price"
+                />
+              </Field>
+            )}
           </div>
           <Field label="Product Image">
             <input

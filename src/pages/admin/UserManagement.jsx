@@ -50,7 +50,7 @@ export default function UserManagement() {
     setForm({
       name: user.name || '',
       email: user.email || '',
-      password: '', // Optional during edit
+      password: '',
       role: user.role || 'Admin',
       phone: user.phone || ''
     })
@@ -62,7 +62,6 @@ export default function UserManagement() {
     setSaving(true)
     try {
       if (editUser) {
-        // Edit mode
         const payload = {
           name: form.name,
           email: form.email,
@@ -77,7 +76,6 @@ export default function UserManagement() {
         setUsers((prev) => prev.map((u) => (u.id === editUser.id ? { ...u, ...updated } : u)))
         notify('User updated successfully.')
       } else {
-        // Create mode
         const res = await createUser({
           name: form.name,
           email: form.email,
@@ -130,15 +128,15 @@ export default function UserManagement() {
     }
   }
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+  if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <h2 className="text-lg font-semibold text-gray-900">User Management</h2>
         <button
           onClick={handleOpenCreate}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors self-start sm:self-auto"
         >
           + Create User
         </button>
@@ -156,7 +154,7 @@ export default function UserManagement() {
         </div>
       )}
 
-      <div className="flex gap-1 mb-4">
+      <div className="flex gap-1 mb-4 flex-wrap">
         {['All', ...ROLES].map((r) => (
           <button
             key={r}
@@ -173,64 +171,66 @@ export default function UserManagement() {
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {['S.No', 'Name', 'Email', 'Phone', 'Role', 'Status', 'Created', 'Actions'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {visible.map((u, index) => (
-              <tr key={u.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
-                <td className="px-4 py-3 font-medium text-gray-900">
-                  {u.name}
-                  {u.id === me.id && (
-                    <span className="ml-1.5 text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">You</span>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-gray-600">{u.email}</td>
-                <td className="px-4 py-3 text-gray-500">{u.phone || '—'}</td>
-                <td className="px-4 py-3 text-gray-600">{u.role}</td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={u.is_active} type="user" />
-                </td>
-                <td className="px-4 py-3 text-gray-500">{fmtDate(u.created_at)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => handleOpenEdit(u)}
-                      className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => doToggle(u)}
-                      disabled={u.id === me.id}
-                      className={`text-xs px-2.5 py-1 rounded transition-colors disabled:opacity-40 ${
-                        u.is_active
-                          ? 'bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-700'
-                          : 'bg-green-50 hover:bg-green-100 text-green-700'
-                      }`}
-                    >
-                      {u.is_active ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button
-                      onClick={() => { setResetFor(u); setNewPw('') }}
-                      className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-                    >
-                      Reset PW
-                    </button>
-                  </div>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[640px]">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['S.No', 'Name', 'Email', 'Phone', 'Role', 'Status', 'Created', 'Actions'].map((h) => (
+                  <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {visible.map((u, index) => (
+                <tr key={u.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    {u.name}
+                    {u.id === me.id && (
+                      <span className="ml-1.5 text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">You</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-gray-600">{u.email}</td>
+                  <td className="px-4 py-3 text-gray-500">{u.phone || '—'}</td>
+                  <td className="px-4 py-3 text-gray-600">{u.role}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={u.is_active} type="user" />
+                  </td>
+                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(u.created_at)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1.5 flex-wrap">
+                      <button
+                        onClick={() => handleOpenEdit(u)}
+                        className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors whitespace-nowrap"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => doToggle(u)}
+                        disabled={u.id === me.id}
+                        className={`text-xs px-2.5 py-1 rounded transition-colors disabled:opacity-40 whitespace-nowrap ${
+                          u.is_active
+                            ? 'bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-700'
+                            : 'bg-green-50 hover:bg-green-100 text-green-700'
+                        }`}
+                      >
+                        {u.is_active ? 'Deactivate' : 'Activate'}
+                      </button>
+                      <button
+                        onClick={() => { setResetFor(u); setNewPw('') }}
+                        className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors whitespace-nowrap"
+                      >
+                        Reset PW
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         {visible.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-10">No users found</p>
         )}

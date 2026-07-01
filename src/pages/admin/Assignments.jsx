@@ -14,10 +14,9 @@ export default function Assignments() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('Active')
   const [createModal, setCreateModal] = useState(false)
-  
-  // Edit mode state
+
   const [editAssignment, setEditAssignment] = useState(null)
-  
+
   const [form, setForm] = useState(BLANK_FORM)
   const [saving, setSaving] = useState(false)
   const [ending, setEnding] = useState(null)
@@ -69,7 +68,7 @@ export default function Assignments() {
         start_date: form.start_date,
         end_date: form.end_date || null
       }
-      
+
       if (editAssignment) {
         await updateAssignment(editAssignment.id, payload)
         notify('Assignment updated successfully.')
@@ -109,11 +108,11 @@ export default function Assignments() {
       ? assignments.filter((a) => !!a.end_date)
       : assignments
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+  if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Sales Executive Assignments</h2>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -122,7 +121,7 @@ export default function Assignments() {
         </div>
         <button
           onClick={openCreate}
-          className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition-colors"
+          className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition-colors self-start sm:self-auto"
         >
           + Assign Store
         </button>
@@ -140,7 +139,7 @@ export default function Assignments() {
         </div>
       )}
 
-      <div className="flex gap-1 mb-4">
+      <div className="flex gap-1 mb-4 flex-wrap">
         {['Active', 'Historical', 'All'].map((f) => (
           <button
             key={f}
@@ -157,73 +156,75 @@ export default function Assignments() {
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {['S.No', 'Sales Executive', 'Assigned Store', 'Start Date', 'End Date', 'Status', 'Actions'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {visible.map((a, index) => {
-              const isActive = !a.end_date
-              return (
-                <tr key={a.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
-                  <td className="px-4 py-3">
-                    <p className="font-medium text-gray-900">
-                      {a.SalesExecutive?.name || `Exec #${a.sales_exec_id}`}
-                    </p>
-                    {a.SalesExecutive?.email && (
-                      <p className="text-xs text-gray-400 mt-0.5">{a.SalesExecutive.email}</p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <p className="text-gray-700">{a.Shop?.shop_name || `Store #${a.shop_id}`}</p>
-                    {(a.Shop?.city || a.Shop?.state) && (
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {[a.Shop.city, a.Shop.state].filter(Boolean).join(', ')}
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[600px]">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['S.No', 'Sales Executive', 'Assigned Store', 'Start Date', 'End Date', 'Status', 'Actions'].map((h) => (
+                  <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {visible.map((a, index) => {
+                const isActive = !a.end_date
+                return (
+                  <tr key={a.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
+                    <td className="px-4 py-3">
+                      <p className="font-medium text-gray-900">
+                        {a.SalesExecutive?.name || `Exec #${a.sales_exec_id}`}
                       </p>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">{fmtDate(a.start_date)}</td>
-                  <td className="px-4 py-3 text-gray-500">{fmtDate(a.end_date)}</td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                        isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                      }`}
-                    >
-                      {isActive ? 'Active' : 'Ended'}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => openEdit(a)}
-                        className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors"
-                      >
-                        Edit
-                      </button>
-                      {isActive && (
-                        <button
-                          onClick={() => doEnd(a)}
-                          disabled={ending === a.id}
-                          className="text-xs px-2.5 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
-                        >
-                          {ending === a.id ? 'Ending…' : 'End'}
-                        </button>
+                      {a.SalesExecutive?.email && (
+                        <p className="text-xs text-gray-400 mt-0.5">{a.SalesExecutive.email}</p>
                       )}
-                    </div>
-                  </td>
-                </tr>
-              )
-            })}
-          </tbody>
-        </table>
+                    </td>
+                    <td className="px-4 py-3">
+                      <p className="text-gray-700">{a.Shop?.shop_name || `Store #${a.shop_id}`}</p>
+                      {(a.Shop?.city || a.Shop?.state) && (
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {[a.Shop.city, a.Shop.state].filter(Boolean).join(', ')}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.start_date)}</td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.end_date)}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                          isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+                        }`}
+                      >
+                        {isActive ? 'Active' : 'Ended'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1.5 flex-wrap">
+                        <button
+                          onClick={() => openEdit(a)}
+                          className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors"
+                        >
+                          Edit
+                        </button>
+                        {isActive && (
+                          <button
+                            onClick={() => doEnd(a)}
+                            disabled={ending === a.id}
+                            className="text-xs px-2.5 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                          >
+                            {ending === a.id ? 'Ending…' : 'End'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
         {visible.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-10">No assignments found</p>
         )}
@@ -256,14 +257,14 @@ export default function Assignments() {
             const activeStores = assignments
               .filter((a) => String(a.sales_exec_id) === String(form.sales_exec_id) && !a.end_date)
               .map((a) => a.Shop?.shop_name || `Store #${a.shop_id}`)
-            
+
             const execPerf = performance.filter((p) => String(p.sales_exec?.id) === String(form.sales_exec_id))
             const totalSales = execPerf.reduce((sum, item) => sum + (item.order?.total_amount || 0), 0)
             const totalOrders = execPerf.length
-            
+
             return (
               <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-3.5 space-y-2.5 text-xs">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <span className="font-semibold text-indigo-900 uppercase tracking-wider text-[10px]">
                     Sales Agent Overview
                   </span>
@@ -276,7 +277,7 @@ export default function Assignments() {
                     View Overall Performance →
                   </a>
                 </div>
-                
+
                 <div className="grid grid-cols-2 gap-2.5">
                   <div className="bg-white/60 rounded p-2 border border-indigo-50/50">
                     <p className="text-gray-500 font-medium">Total Sales</p>

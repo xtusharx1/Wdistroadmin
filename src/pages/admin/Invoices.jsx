@@ -1,10 +1,16 @@
 import { useState, useEffect } from 'react'
-import { getOrders, getShops, getInvoice, regenerateInvoice } from '../../api'
+import { getOrders, getShops, getInvoice, regenerateInvoice, addInvoicePayment } from '../../api'
 import Modal from '../../components/Modal'
 
-const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
+const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
-const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
+const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
+
+const paymentBadge = (status) => {
+  if (status === 'paid' || status === 'settled') return { label: '✓ Paid', cls: 'bg-green-50 text-green-700 border-green-200' }
+  if (status === 'partially_paid') return { label: '~ Partially Paid', cls: 'bg-orange-50 text-orange-700 border-orange-200' }
+  return { label: 'Unsettled', cls: 'bg-yellow-50 text-yellow-700 border-yellow-200' }
+}
 
 export default function AdminInvoices() {
   const [orders, setOrders] = useState([])
@@ -12,6 +18,7 @@ export default function AdminInvoices() {
   const [loading, setLoading] = useState(true)
   const [invoiceModal, setInvoiceModal] = useState(null)
   const [invoiceFetching, setInvoiceFetching] = useState(false)
+  const [settling, setSettling] = useState(false)
 
   useEffect(() => {
     Promise.all([getOrders(), getShops()]).then(([oRes, sRes]) => {
@@ -47,7 +54,17 @@ export default function AdminInvoices() {
     }
   }
 
-  const handlePrint = () => window.print()
+  const handleAddPayment = async (invoiceId, formData) => {
+    setSettling(true)
+    try {
+      const res = await addInvoicePayment(invoiceId, formData)
+      setInvoiceModal(prev => ({ ...prev, invoice: res.data.data.invoice }))
+    } catch (err) {
+      alert(err.response?.data?.message || 'Failed to record payment.')
+    } finally {
+      setSettling(false)
+    }
+  }
 
   if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
 
@@ -112,9 +129,10 @@ export default function AdminInvoices() {
             order={invoiceModal.order}
             invoice={invoiceModal.invoice}
             storeMap={storeMap}
-            onPrint={handlePrint}
             onRegenerate={handleInvoiceRegeneration}
             regenerating={invoiceFetching}
+            onAddPayment={handleAddPayment}
+            settling={settling}
           />
         )}
       </Modal>
@@ -122,14 +140,11 @@ export default function AdminInvoices() {
   )
 }
 
-function InvoiceView({ order, invoice, storeMap, onPrint, onRegenerate, regenerating }) {
-  const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
-
+function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onAddPayment, settling }) {
   if (!invoice) {
     return <p className="text-gray-500 text-sm">Invoice not found for this order.</p>
   }
 
-  // Calculate invoice discount details
   const items = order.OrderItems || []
   let subtotal = 0
   let totalDiscount = 0
@@ -139,62 +154,51 @@ function InvoiceView({ order, invoice, storeMap, onPrint, onRegenerate, regenera
     const originalPrice = Number(item.price || 0)
     const customPrice = item.custom_price !== null && item.custom_price !== undefined ? Number(item.custom_price) : originalPrice
     const discount = originalPrice - customPrice
-    const finalPrice = customPrice
-    const total = finalPrice * qty
+    const total = customPrice * qty
 
     subtotal += originalPrice * qty
     totalDiscount += discount * qty
 
-    return {
-      id: item.id,
-      name: item.Product?.name || `Product #${item.product_id}`,
-      sku: item.Product?.sku || '—',
-      qty,
-      originalPrice,
-      discount,
-      finalPrice,
-      total
-    }
+    return { id: item.id, name: item.Product?.name || `Product #${item.product_id}`, sku: item.Product?.sku || '—', qty, originalPrice, discount, finalPrice: customPrice, total }
   })
 
-  const finalPayable = subtotal - totalDiscount
+  const status = invoice.payment_status
+  const isPaid = status === 'paid' || status === 'settled'
+  const badge = paymentBadge(status)
+  const payments = invoice.PaymentHistory || []
+  const totalPaid = Number(invoice.total_paid_amount) || 0
+  const remaining = Number(invoice.remaining_balance) ?? (invoice.final_amount - totalPaid)
 
   return (
     <div>
+      {/* Header */}
       <div className="flex items-start justify-between mb-5">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Invoice #{invoice.id}</p>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Generated: {new Date(invoice.generated_at).toLocaleString('en-IN')}
-          </p>
+          <p className="text-sm text-gray-500 mt-0.5">Generated: {new Date(invoice.generated_at).toLocaleString('en-US')}</p>
+          <span className={`inline-flex items-center mt-1.5 text-xs px-2.5 py-0.5 rounded-full font-medium border ${badge.cls}`}>
+            {badge.label}
+          </span>
         </div>
         <div className="flex gap-2">
           {invoice.pdf_url && (
-            <a
-              href={invoice.pdf_url}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors inline-flex items-center"
-            >
+            <a href={invoice.pdf_url} target="_blank" rel="noreferrer"
+              className="text-xs px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors inline-flex items-center">
               Open PDF
             </a>
           )}
-          <button
-            onClick={() => onRegenerate(invoice)}
-            disabled={regenerating}
-            className="text-xs px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50 transition-colors"
-          >
-            {regenerating ? 'Regenerating...' : 'Regenerate Invoice'}
+          <button onClick={() => onRegenerate(invoice)} disabled={regenerating}
+            className="text-xs px-3 py-1.5 rounded bg-amber-600 hover:bg-amber-700 text-white font-medium disabled:opacity-50 transition-colors">
+            {regenerating ? 'Regenerating...' : 'Regenerate'}
           </button>
-          <button
-            onClick={onPrint}
-            className="text-xs px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-          >
+          <button onClick={() => window.print()}
+            className="text-xs px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors">
             Print
           </button>
         </div>
       </div>
 
+      {/* Order Info */}
       <div className="grid grid-cols-2 gap-4 mb-5 p-4 bg-gray-50 rounded-lg text-sm">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Order</p>
@@ -206,7 +210,7 @@ function InvoiceView({ order, invoice, storeMap, onPrint, onRegenerate, regenera
         </div>
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Order Date</p>
-          <p className="mt-0.5">{new Date(order.created_at).toLocaleDateString('en-IN')}</p>
+          <p className="mt-0.5">{new Date(order.created_at).toLocaleDateString('en-US')}</p>
         </div>
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Status</p>
@@ -214,6 +218,7 @@ function InvoiceView({ order, invoice, storeMap, onPrint, onRegenerate, regenera
         </div>
       </div>
 
+      {/* Items */}
       <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden mb-4">
         <thead className="bg-gray-50">
           <tr>
@@ -229,9 +234,7 @@ function InvoiceView({ order, invoice, storeMap, onPrint, onRegenerate, regenera
               <td className="px-3 py-2.5 font-mono text-xs text-gray-500">{item.sku}</td>
               <td className="px-3 py-2.5">{item.qty}</td>
               <td className="px-3 py-2.5">{fmt(item.originalPrice)}</td>
-              <td className="px-3 py-2.5 text-green-600">
-                {item.discount > 0 ? `-${fmt(item.discount)}` : '—'}
-              </td>
+              <td className="px-3 py-2.5 text-green-600">{item.discount > 0 ? `-${fmt(item.discount)}` : '—'}</td>
               <td className="px-3 py-2.5">{fmt(item.finalPrice)}</td>
               <td className="px-3 py-2.5 font-medium">{fmt(item.total)}</td>
             </tr>
@@ -239,21 +242,146 @@ function InvoiceView({ order, invoice, storeMap, onPrint, onRegenerate, regenera
         </tbody>
       </table>
 
-      <div className="flex justify-end mt-4 p-4 bg-gray-50 rounded-lg">
+      {/* Totals */}
+      <div className="flex justify-end p-4 bg-gray-50 rounded-lg mb-4">
         <div className="text-right space-y-1 text-sm">
-          <p className="text-gray-500">
-            Subtotal: <span className="font-semibold text-gray-900">{fmt(subtotal)}</span>
-          </p>
-          <p className="text-gray-500">
-            Total Discount: <span className="font-semibold text-green-600">-{fmt(totalDiscount)}</span>
-          </p>
-
+          <p className="text-gray-500">Subtotal: <span className="font-semibold text-gray-900">{fmt(subtotal)}</span></p>
+          <p className="text-gray-500">Total Discount: <span className="font-semibold text-green-600">-{fmt(totalDiscount)}</span></p>
           <div className="border-t border-gray-200 my-2 pt-2">
-            <p className="text-lg font-bold text-indigo-700">
-              Final Payable: <span className="text-2xl ml-1">{fmt(finalPayable)}</span>
-            </p>
+            <p className="text-lg font-bold text-indigo-700">Final Payable: <span className="text-2xl ml-1">{fmt(invoice.final_amount)}</span></p>
           </div>
         </div>
+      </div>
+
+      {/* Payment Summary */}
+      <div className="p-4 border border-gray-200 rounded-lg mb-4 bg-gray-50">
+        <h5 className="text-sm font-semibold text-gray-900 mb-3">Payment Summary</h5>
+        <div className="grid grid-cols-3 gap-3 text-sm">
+          <div className="text-center p-2.5 bg-white rounded-lg border border-gray-200">
+            <p className="text-xs text-gray-400 mb-1">Invoice Total</p>
+            <p className="font-bold text-gray-900">{fmt(invoice.final_amount)}</p>
+          </div>
+          <div className="text-center p-2.5 bg-white rounded-lg border border-green-200">
+            <p className="text-xs text-gray-400 mb-1">Total Paid</p>
+            <p className="font-bold text-green-700">{fmt(totalPaid)}</p>
+          </div>
+          <div className={`text-center p-2.5 bg-white rounded-lg border ${isPaid ? 'border-green-200' : 'border-orange-200'}`}>
+            <p className="text-xs text-gray-400 mb-1">Balance Due</p>
+            <p className={`font-bold ${isPaid ? 'text-green-700' : 'text-orange-600'}`}>{fmt(remaining)}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Payment History */}
+      {payments.length > 0 && (
+        <div className="mb-4">
+          <h5 className="text-sm font-semibold text-gray-900 mb-2">Payment History</h5>
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <table className="w-full text-xs">
+              <thead className="bg-gray-50">
+                <tr>
+                  {['Date & Time', 'Method', 'Amount', 'Ref No', 'Verified By', 'Remarks'].map((h) => (
+                    <th key={h} className="px-3 py-2 text-left font-medium text-gray-500">{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {payments.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2.5 text-gray-600">{fmtTime(p.verified_at)}</td>
+                    <td className="px-3 py-2.5 font-medium">{p.payment_method === 'MO' ? 'Money Order' : p.payment_method}</td>
+                    <td className="px-3 py-2.5 font-semibold text-green-700">{fmt(p.payment_amount)}</td>
+                    <td className="px-3 py-2.5 font-mono text-gray-500">{p.payment_reference_no || '—'}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{p.VerifiedBy?.name || `User #${p.verified_by_user_id}` || '—'}</td>
+                    <td className="px-3 py-2.5 text-gray-500 max-w-xs truncate">{p.remarks || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Add Payment Form */}
+      {!isPaid && (
+        <PaymentForm
+          invoiceId={invoice.id}
+          invoiceTotal={invoice.final_amount}
+          remaining={remaining}
+          onAddPayment={onAddPayment}
+          settling={settling}
+        />
+      )}
+    </div>
+  )
+}
+
+function PaymentForm({ invoiceId, invoiceTotal, remaining, onAddPayment, settling }) {
+  const [method, setMethod] = useState('')
+  const [amount, setAmount] = useState('')
+  const [refNo, setRefNo] = useState('')
+  const [remarks, setRemarks] = useState('')
+
+  const handleSubmit = () => {
+    if (!method) { alert('Please select a payment method.'); return }
+    const parsed = parseFloat(amount)
+    if (!amount || isNaN(parsed) || parsed <= 0) { alert('Please enter a valid payment amount.'); return }
+    if (parsed > remaining + 0.005) {
+      alert(`Payment amount cannot exceed the remaining balance (${fmt(remaining)}).`)
+      return
+    }
+    onAddPayment(invoiceId, {
+      payment_method: method,
+      payment_amount: parsed,
+      ...(refNo && { payment_reference_no: refNo }),
+      ...(remarks && { remarks }),
+    })
+  }
+
+  const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+
+  return (
+    <div className="border border-gray-200 rounded-lg p-4 bg-white">
+      <h5 className="text-sm font-semibold text-gray-900 mb-3">Record Payment</h5>
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-gray-500 block mb-1">Payment Method <span className="text-red-500">*</span></label>
+            <select value={method} onChange={(e) => setMethod(e.target.value)}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400">
+              <option value="">Select method…</option>
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="Check">Check</option>
+              <option value="MO">Money Order (MO)</option>
+              <option value="Adjusted">Adjusted</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500 block mb-1">Payment Amount <span className="text-red-500">*</span></label>
+            <input type="number" step="0.01" min="0.01" max={remaining}
+              value={amount} onChange={(e) => setAmount(e.target.value)}
+              placeholder={`Max ${fmt(remaining)}`}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+          </div>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-500 block mb-1">Payment Reference No</label>
+          <input type="text" value={refNo} onChange={(e) => setRefNo(e.target.value)}
+            placeholder="e.g. CHK-12345, TXN-98765"
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        </div>
+        <div>
+          <label className="text-xs font-medium text-gray-500 block mb-1">Remarks</label>
+          <textarea value={remarks} onChange={(e) => setRemarks(e.target.value)}
+            placeholder="Any notes about this payment…"
+            rows={2}
+            className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none" />
+        </div>
+        <button onClick={handleSubmit} disabled={settling || !method || !amount}
+          className="w-full bg-green-600 hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-2 text-sm rounded-md transition-colors">
+          {settling ? 'Saving…' : 'Record Payment'}
+        </button>
       </div>
     </div>
   )

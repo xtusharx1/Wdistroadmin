@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { getShops, approveShop, rejectShop, resetShopPassword, updateShop, getUsers, createAssignment } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import Modal from '../../components/Modal'
+import ShopPermitsTab from './ShopPermitsTab'
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
 
@@ -17,7 +18,6 @@ export default function StoreApprovals() {
   const [newPw, setNewPw] = useState('')
   const [resetting, setResetting] = useState(false)
 
-  // Edit store state
   const [editStore, setEditStore] = useState(null)
   const [editForm, setEditForm] = useState({
     shop_name: '',
@@ -32,7 +32,6 @@ export default function StoreApprovals() {
   })
   const [savingEdit, setSavingEdit] = useState(false)
 
-  // Approval assignment states
   const [execs, setExecs] = useState([])
   const [approvingStore, setApprovingStore] = useState(null)
   const [selectedExecId, setSelectedExecId] = useState('')
@@ -69,7 +68,7 @@ export default function StoreApprovals() {
     setApproving(true)
     try {
       await approveShop(approvingStore.id)
-      
+
       let assignedText = ''
       if (selectedExecId) {
         const exec = execs.find((u) => String(u.id) === String(selectedExecId))
@@ -168,6 +167,8 @@ export default function StoreApprovals() {
   })
   const [savingLic, setSavingLic] = useState(false)
 
+  const [permitsFor, setPermitsFor] = useState(null)
+
   const openLicenseModal = (store) => {
     setLicenseFor(store)
     setLicForm({
@@ -200,13 +201,13 @@ export default function StoreApprovals() {
 
   const inputClass = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+  if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <h2 className="text-lg font-semibold text-gray-900">Stores</h2>
-        <div className="flex gap-1">
+        <div className="flex gap-1 flex-wrap">
           {FILTERS.map((f) => (
             <button
               key={f}
@@ -241,87 +242,95 @@ export default function StoreApprovals() {
       )}
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {['S.No', 'Store Name', 'Owner', 'Contact', 'City / State', 'Seller Permit', 'Submitted', 'Status', 'Actions'].map(
-                (h) => (
-                  <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
-                    {h}
-                  </th>
-                )
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {visible.map((s, index) => (
-              <tr key={s.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
-                <td className="px-4 py-3 font-medium text-gray-900">
-                  <div>{s.shop_name}</div>
-                  {s.tobacco_license && (
-                    <span className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mt-1 inline-block">
-                      Tobacco Lic: {s.tobacco_license}
-                    </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <div className="text-gray-700">{s.owner_name}</div>
-                  <div className="text-xs text-gray-400">{s.email}</div>
-                </td>
-                <td className="px-4 py-3 text-gray-500">{s.contact_details}</td>
-                <td className="px-4 py-3 text-gray-500">
-                  {[s.city, s.state].filter(Boolean).join(', ') || '—'}
-                </td>
-                <td className="px-4 py-3 font-mono text-xs text-gray-600">{s.seller_permit}</td>
-                <td className="px-4 py-3 text-gray-500">{fmtDate(s.created_at)}</td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={s.approval_status} type="approval" />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex gap-2">
-                    {s.approval_status !== 'Approved' && (
-                      <button
-                        onClick={() => { setApprovingStore(s); setSelectedExecId('') }}
-                        disabled={acting === s.id}
-                        className="text-xs px-2.5 py-1 rounded bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-colors"
-                      >
-                        Approve
-                      </button>
-                    )}
-                    {s.approval_status !== 'Rejected' && (
-                      <button
-                        onClick={() => doReject(s)}
-                        disabled={acting === s.id}
-                        className="text-xs px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors"
-                      >
-                        Reject
-                      </button>
-                    )}
-                    <button
-                      onClick={() => openEditModal(s)}
-                      className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => { setResetFor(s); setNewPw('') }}
-                      className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors"
-                    >
-                      Reset PW
-                    </button>
-                    <button
-                      onClick={() => openLicenseModal(s)}
-                      className="text-xs px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium transition-colors"
-                    >
-                      Licenses
-                    </button>
-                  </div>
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[900px]">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                {['S.No', 'Store Name', 'Owner', 'Contact', 'City / State', 'Seller Permit', 'Submitted', 'Status', 'Actions'].map(
+                  (h) => (
+                    <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                      {h}
+                    </th>
+                  )
+                )}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {visible.map((s, index) => (
+                <tr key={s.id} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
+                  <td className="px-4 py-3 font-medium text-gray-900">
+                    <div>{s.shop_name}</div>
+                    {s.tobacco_license && (
+                      <span className="text-xs text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded mt-1 inline-block">
+                        Tobacco Lic: {s.tobacco_license}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-gray-700">{s.owner_name}</div>
+                    <div className="text-xs text-gray-400">{s.email}</div>
+                  </td>
+                  <td className="px-4 py-3 text-gray-500">{s.contact_details}</td>
+                  <td className="px-4 py-3 text-gray-500">
+                    {[s.city, s.state].filter(Boolean).join(', ') || '—'}
+                  </td>
+                  <td className="px-4 py-3 font-mono text-xs text-gray-600">{s.seller_permit}</td>
+                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(s.created_at)}</td>
+                  <td className="px-4 py-3">
+                    <StatusBadge status={s.approval_status} type="approval" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-1.5 flex-wrap">
+                      {s.approval_status !== 'Approved' && (
+                        <button
+                          onClick={() => { setApprovingStore(s); setSelectedExecId('') }}
+                          disabled={acting === s.id}
+                          className="text-xs px-2.5 py-1 rounded bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-colors whitespace-nowrap"
+                        >
+                          Approve
+                        </button>
+                      )}
+                      {s.approval_status !== 'Rejected' && (
+                        <button
+                          onClick={() => doReject(s)}
+                          disabled={acting === s.id}
+                          className="text-xs px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors whitespace-nowrap"
+                        >
+                          Reject
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openEditModal(s)}
+                        className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors whitespace-nowrap"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => { setResetFor(s); setNewPw('') }}
+                        className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors whitespace-nowrap"
+                      >
+                        Reset PW
+                      </button>
+                      <button
+                        onClick={() => openLicenseModal(s)}
+                        className="text-xs px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium transition-colors whitespace-nowrap"
+                      >
+                        Licenses
+                      </button>
+                      <button
+                        onClick={() => setPermitsFor(s)}
+                        className="text-xs px-2.5 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 font-medium transition-colors whitespace-nowrap"
+                      >
+                        Permits
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         {visible.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-10">No stores in this category</p>
         )}
@@ -330,7 +339,7 @@ export default function StoreApprovals() {
       {/* Edit Store Modal */}
       <Modal open={!!editStore} onClose={() => setEditStore(null)} title={`Edit Store — ${editStore?.shop_name}`}>
         <form onSubmit={handleEditSubmit} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Store Name *</label>
               <input
@@ -353,7 +362,7 @@ export default function StoreApprovals() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
               <input
@@ -386,7 +395,7 @@ export default function StoreApprovals() {
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
               <input
@@ -528,13 +537,23 @@ export default function StoreApprovals() {
         </form>
       </Modal>
 
+      {/* Permits Modal */}
+      <Modal
+        open={!!permitsFor}
+        onClose={() => setPermitsFor(null)}
+        title={`Permits — ${permitsFor?.shop_name}`}
+        size="lg"
+      >
+        {permitsFor && <ShopPermitsTab shop={permitsFor} />}
+      </Modal>
+
       {/* Approve & Assign Store Modal */}
       <Modal open={!!approvingStore} onClose={() => setApprovingStore(null)} title="Approve Store">
         <form onSubmit={handleApprovalConfirm} className="space-y-4">
           <p className="text-sm text-gray-600">
             Are you sure you want to approve store <strong className="text-gray-900">{approvingStore?.shop_name}</strong>?
           </p>
-          
+
           <div>
             <label className="block text-xs font-semibold text-gray-700 mb-1.5">
               Assign to Sales Agent (Optional)

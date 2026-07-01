@@ -48,6 +48,7 @@ export const updateShop = (id, data) => http.patch(`/shops/${id}`, data)
 
 // ── Products ────────────────────────────────────────────────────────────────
 export const getProducts = (params) => http.get('/products', { params })
+export const getFeaturedProducts = () => http.get('/products/featured')
 export const createProduct = (data) => http.post('/products', data)
 export const bulkCreateProducts = (data) => http.post('/products/bulk', data)
 export const updateProduct = (id, data) => http.patch(`/products/${id}`, data)
@@ -65,11 +66,27 @@ export const processOrder = (id, items) =>
   http.patch(`/orders/${id}/process`, { items })
 export const updateOrderStatus = (id, status) =>
   http.patch(`/orders/${id}/status`, { status })
+export const editOrder = (id, items) =>
+  http.put(`/orders/${id}/edit`, { items })
 
 // ── Invoices ────────────────────────────────────────────────────────────────
 export const getInvoice = (orderId) => http.get(`/invoices/${orderId}`)
 export const generateInvoice = (orderId) => http.post(`/invoices/${orderId}/generate`)
 export const regenerateInvoice = (invoiceId) => http.post(`/invoices/${invoiceId}/regenerate`)
+export const addInvoicePayment = (invoiceId, data) => http.post(`/invoices/${invoiceId}/payments`, data)
+export const getInvoicePayments = (invoiceId) => http.get(`/invoices/${invoiceId}/payments`)
+export const getAllPayments = (params) => http.get('/invoices/payments', { params })
+
+// ── Permits ─────────────────────────────────────────────────────────────────
+export const getShopPermits = (shopId) => http.get(`/permits/shop/${shopId}`)
+export const reviewPermit = (id, data) => http.patch(`/permits/${id}/review`, data)
+
+// ── Variation Groups ────────────────────────────────────────────────────────
+export const getVariationGroups = () => http.get('/variation-groups')
+export const getVariationGroup = (id) => http.get(`/variation-groups/${id}`)
+export const createVariationGroup = (data) => http.post('/variation-groups', data)
+export const updateVariationGroup = (id, data) => http.patch(`/variation-groups/${id}`, data)
+export const deleteVariationGroup = (id) => http.delete(`/variation-groups/${id}`)
 
 // ── Sales ───────────────────────────────────────────────────────────────────
 export const getSalesAssignments = () => http.get('/sales/shops')
