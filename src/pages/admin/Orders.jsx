@@ -491,7 +491,7 @@ export default function AdminOrders() {
       </div>
 
       {/* Order Detail Modal */}
-      <Modal open={!!detail} onClose={() => setDetail(null)} title={`Order WS-${detail?.id}`} size="lg">
+      <Modal open={!!detail} onClose={() => setDetail(null)} title={`Order WS-${detail?.id}`} size="xl">
         {detail && (
           <div>
             {/* Tabs */}
@@ -530,7 +530,7 @@ export default function AdminOrders() {
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
-                    <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden min-w-[640px]">
+                    <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
                       <thead className="bg-gray-50 border-b border-gray-200">
                         <tr>
                           {['Date & Time', 'Edited By', 'Action', 'Product', 'Previous Value', 'New Value'].map((h) => (
