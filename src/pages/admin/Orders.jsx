@@ -475,12 +475,12 @@ export default function AdminOrders() {
               {payments.length > 0 && !showSettleForm && (
                 <div className="mt-3 pt-3 border-t border-gray-200">
                   <p className="text-xs font-semibold text-gray-600 mb-2">Payment History</p>
-                  <div className="border border-gray-200 rounded-md overflow-hidden">
-                    <table className="w-full text-xs">
+                  <div className="border border-gray-200 rounded-md overflow-hidden overflow-x-auto">
+                    <table className="w-full text-xs min-w-[480px]">
                       <thead className="bg-gray-50">
                         <tr>
                           {['Date', 'Method', 'Amount', 'Ref No', 'By', 'Remarks'].map((h) => (
-                            <th key={h} className="px-2 py-1.5 text-left font-medium text-gray-500">{h}</th>
+                            <th key={h} className="px-2 py-1.5 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -511,7 +511,7 @@ export default function AdminOrders() {
                       </span>
                     )}
                   </p>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs text-gray-500 font-medium block mb-1">Payment Method <span className="text-red-500">*</span></label>
                       <select
@@ -580,11 +580,12 @@ export default function AdminOrders() {
               )}
             </div>
 
-            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[420px]">
               <thead className="bg-gray-50">
                 <tr>
                   {['Product', 'Price', 'Requested', 'Approved', 'Subtotal'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -619,6 +620,7 @@ export default function AdminOrders() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </Modal>
@@ -637,11 +639,12 @@ export default function AdminOrders() {
               recalculate the order total.
             </p>
 
-            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden mb-4">
+            <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[540px]">
               <thead className="bg-gray-50">
                 <tr>
                   {['Product', 'Unit Price', 'Custom Price', 'Requested', 'Approve Qty', 'Subtotal'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">{h}</th>
+                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -685,6 +688,7 @@ export default function AdminOrders() {
                 ))}
               </tbody>
             </table>
+            </div>
 
             <div className="flex items-center justify-between mb-5">
               <span className="text-sm text-gray-500">Approved Total</span>

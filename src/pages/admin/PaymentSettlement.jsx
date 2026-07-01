@@ -14,7 +14,7 @@ export default function PaymentSettlement() {
   const [tab, setTab] = useState('history')
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-1">Payment Settlement</h2>
       <p className="text-sm text-gray-500 mb-5">Track and record invoice payments across all orders.</p>
 
@@ -72,14 +72,14 @@ function HistoryTab() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
         <p className="text-sm text-gray-500">{payments.length} payment{payments.length !== 1 ? 's' : ''} recorded</p>
         <input
           type="text"
           placeholder="Search invoice, order, store, method…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-64"
+          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-64"
         />
       </div>
 
@@ -219,9 +219,9 @@ function RecordTab() {
   const payments = invoice?.PaymentHistory || []
 
   return (
-    <div className="grid grid-cols-5 gap-6">
+    <div className="flex flex-col lg:grid lg:grid-cols-5 gap-4 lg:gap-6">
       {/* Left: Invoice Search */}
-      <div className="col-span-2">
+      <div className="lg:col-span-2">
         <div className="mb-3">
           <input
             type="text"
@@ -264,7 +264,7 @@ function RecordTab() {
       </div>
 
       {/* Right: Invoice Detail + Payment Form */}
-      <div className="col-span-3">
+      <div className="lg:col-span-3">
         {!selectedOrder && (
           <div className="flex items-center justify-center h-64 border-2 border-dashed border-gray-200 rounded-lg">
             <p className="text-gray-400 text-sm">Select an invoice from the left to record a payment</p>
@@ -300,7 +300,7 @@ function RecordTab() {
                   </a>
                 )}
               </div>
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="text-center p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-400 mb-1">Invoice Total</p>
                   <p className="font-bold text-gray-900 text-sm">{fmt(invoice.final_amount)}</p>
@@ -322,11 +322,12 @@ function RecordTab() {
                 <div className="px-4 py-2.5 bg-gray-50 border-b border-gray-200">
                   <p className="text-xs font-semibold text-gray-700">Payment History ({payments.length})</p>
                 </div>
-                <table className="w-full text-xs">
+                <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[420px]">
                   <thead className="bg-white border-b border-gray-100">
                     <tr>
                       {['Date', 'Method', 'Amount', 'Ref No', 'By', 'Remarks'].map((h) => (
-                        <th key={h} className="px-3 py-2 text-left font-medium text-gray-500">{h}</th>
+                        <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -343,6 +344,7 @@ function RecordTab() {
                     ))}
                   </tbody>
                 </table>
+                </div>
               </div>
             )}
 
@@ -371,7 +373,7 @@ function RecordTab() {
                 )}
 
                 <div className="space-y-3">
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-medium text-gray-500 block mb-1">Payment Method <span className="text-red-500">*</span></label>
                       <select value={method} onChange={(e) => { setMethod(e.target.value); setErrorMsg('') }}
@@ -392,7 +394,7 @@ function RecordTab() {
                         className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" />
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="text-xs font-medium text-gray-500 block mb-1">Payment Reference No</label>
                       <input type="text" value={refNo} onChange={(e) => setRefNo(e.target.value)}

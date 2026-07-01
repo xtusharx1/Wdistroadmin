@@ -489,16 +489,16 @@ export default function Products() {
       : 'text-green-700 bg-green-50'
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <h2 className="text-lg font-semibold text-gray-900">Products</h2>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <input
             type="text"
             placeholder="Search products…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-48"
+            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-48"
           />
           <label className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer inline-flex items-center">
             Import Excel/CSV
@@ -591,7 +591,8 @@ export default function Products() {
           <p className="text-center text-gray-400 text-sm py-10">Loading…</p>
         ) : (
           <>
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[640px]">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">S.No</th>
@@ -674,6 +675,7 @@ export default function Products() {
                 })}
               </tbody>
             </table>
+            </div>
             {visible.length === 0 && (
               <p className="text-center text-gray-400 text-sm py-10">No products found</p>
             )}
@@ -716,7 +718,7 @@ export default function Products() {
               {msg.text}
             </div>
           )}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Name" required>
               <input
                 value={form.name}
@@ -734,7 +736,7 @@ export default function Products() {
               />
             </Field>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <Field label="Main Category" required>
               <select
                 value={form.mainCategory}
@@ -765,7 +767,7 @@ export default function Products() {
                 ))}
               </select>
             </Field>
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <label className="block text-sm font-medium text-gray-500 mb-1">Required License</label>
               <span className={`inline-block px-2.5 py-1 rounded text-xs font-semibold uppercase ${
                 getRequiredLicense(form.mainCategory) === 'Tobacco License'
@@ -808,7 +810,7 @@ export default function Products() {
                 />
               </Field>
             )}
-            <div className="col-span-2">
+            <div className="sm:col-span-2">
               <Field label="Description">
                 <textarea
                   value={form.description}
@@ -818,7 +820,7 @@ export default function Products() {
                 />
               </Field>
             </div>
-            <div className="col-span-2 flex items-center gap-2 py-1">
+            <div className="sm:col-span-2 flex items-center gap-2 py-1">
               <input
                 type="checkbox"
                 id="is_active"
@@ -832,7 +834,7 @@ export default function Products() {
             </div>
 
             {/* Clearance toggle */}
-            <div className="col-span-2 flex items-center gap-2 py-1">
+            <div className="sm:col-span-2 flex items-center gap-2 py-1">
               <input
                 type="checkbox"
                 id="is_clearance"

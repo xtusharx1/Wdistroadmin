@@ -144,9 +144,9 @@ export default function VariationGroups() {
   }
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
           <h1 className="text-xl font-bold text-gray-900">Product Variation Groups</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -155,7 +155,7 @@ export default function VariationGroups() {
         </div>
         <button
           onClick={openCreate}
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors self-start sm:self-auto"
         >
           + Create Group
         </button>
@@ -171,8 +171,8 @@ export default function VariationGroups() {
           No variation groups yet. Create one to link related products.
         </div>
       ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full text-sm">
+        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm min-w-[520px]">
             <thead>
               <tr className="border-b border-gray-100 bg-gray-50">
                 <th className="text-left px-4 py-3 font-medium text-gray-600">Group Name</th>

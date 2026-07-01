@@ -105,7 +105,7 @@ export default function ShopPermitsTab({ shop }) {
                 <p className="text-sm text-gray-400 italic">No document uploaded by the shop yet.</p>
               ) : (
                 <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm">
                     <div>
                       <span className="text-gray-500">File:</span>{' '}
                       <span className="text-gray-800 font-medium">{permit.original_file_name}</span>
@@ -122,7 +122,7 @@ export default function ShopPermitsTab({ shop }) {
                     </div>
                   )}
 
-                  <div className="flex gap-2 pt-1">
+                  <div className="flex gap-2 flex-wrap pt-1">
                     <a
                       href={permit.document_url}
                       target="_blank"

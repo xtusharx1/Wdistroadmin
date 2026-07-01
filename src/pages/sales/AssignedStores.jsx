@@ -148,11 +148,11 @@ export default function AssignedStores() {
       ? assignments.filter((a) => !!a.end_date)
       : assignments
 
-  if (loading && assignments.length === 0) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+  if (loading && assignments.length === 0) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Assigned Stores</h2>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -274,7 +274,7 @@ export default function AssignedStores() {
 
             {/* Tab Contents */}
             {activeTab === 'details' && (
-              <div className="grid grid-cols-2 gap-4 text-sm text-gray-700">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm text-gray-700">
                 <div className="p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Store Name</p>
                   <p className="font-semibold mt-1">{selectedStore.shop_name}</p>
@@ -291,7 +291,7 @@ export default function AssignedStores() {
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Seller Permit</p>
                   <p className="font-mono mt-1">{selectedStore.seller_permit || '—'}</p>
                 </div>
-                <div className="col-span-2 p-3 bg-gray-50 rounded-lg">
+                <div className="sm:col-span-2 p-3 bg-gray-50 rounded-lg">
                   <p className="text-xs text-gray-400 uppercase tracking-wide">Address</p>
                   <p className="mt-1">
                     {[selectedStore.address, selectedStore.city, selectedStore.state, selectedStore.zip]
@@ -303,15 +303,15 @@ export default function AssignedStores() {
             )}
 
             {activeTab === 'orders' && (
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden text-sm">
-                <table className="w-full text-left">
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto text-sm">
+                <table className="w-full text-left min-w-[480px]">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-4 py-2 font-medium text-gray-500">Order ID</th>
-                      <th className="px-4 py-2 font-medium text-gray-500">Date</th>
-                      <th className="px-4 py-2 font-medium text-gray-500">Total</th>
-                      <th className="px-4 py-2 font-medium text-gray-500">Status</th>
-                      <th className="px-4 py-2 font-medium text-gray-500">Actions</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Order ID</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Date</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Total</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Status</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -346,15 +346,15 @@ export default function AssignedStores() {
             )}
 
             {activeTab === 'invoices' && (
-              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden text-sm">
-                <table className="w-full text-left">
+              <div className="bg-white rounded-lg border border-gray-200 overflow-hidden overflow-x-auto text-sm">
+                <table className="w-full text-left min-w-[520px]">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      <th className="px-4 py-2 font-medium text-gray-500">Invoice ID</th>
-                      <th className="px-4 py-2 font-medium text-gray-500">Order ID</th>
-                      <th className="px-4 py-2 font-medium text-gray-500">Grand Total</th>
-                      <th className="px-4 py-2 font-medium text-gray-500">Generated At</th>
-                      <th className="px-4 py-2 font-medium text-gray-500">Actions</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Invoice ID</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Order ID</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Grand Total</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Generated At</th>
+                      <th className="px-4 py-2 font-medium text-gray-500 whitespace-nowrap">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -411,7 +411,7 @@ export default function AssignedStores() {
       <Modal open={!!orderDetail} onClose={() => setOrderDetail(null)} title={`Order WS-${orderDetail?.id}`} size="lg">
         {orderDetail && (
           <div>
-            <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 text-sm">
               <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Store</p>
                 <p className="font-medium">{selectedStore?.shop_name || `Store #${orderDetail.shop_id}`}</p>
@@ -449,7 +449,7 @@ export default function AssignedStores() {
             </div>
 
             {/* Quick Status Action Buttons */}
-            <div className="flex gap-2 mb-5">
+            <div className="flex gap-2 flex-wrap mb-5">
               {orderDetail.status === 'pending' && (
                 <button
                   onClick={() => openProcess(orderDetail)}
@@ -478,7 +478,7 @@ export default function AssignedStores() {
 
             {/* Invoice Section */}
             {(orderDetail.status === 'delivered' || orderDetail.status === 'completed') && (
-              <div className="mt-4 mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+              <div className="mt-4 mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <h4 className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
                     <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -492,7 +492,7 @@ export default function AssignedStores() {
                         'No invoice generated for this order yet.'}
                   </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   {loadingInvoice ? (
                     <span className="text-xs text-gray-400">Loading...</span>
                   ) : invoice?.pdf_url ? (
@@ -535,11 +535,12 @@ export default function AssignedStores() {
               </div>
             )}
 
-            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[420px]">
               <thead className="bg-gray-50">
                 <tr>
                   {['Product', 'Price', 'Requested', 'Approved', 'Subtotal'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">
                       {h}
                     </th>
                   ))}
@@ -575,6 +576,7 @@ export default function AssignedStores() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </Modal>
@@ -593,11 +595,12 @@ export default function AssignedStores() {
               recalculate the order total.
             </p>
 
-            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden mb-4">
+            <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[500px]">
               <thead className="bg-gray-50">
                 <tr>
                   {['Product', 'Unit Price', 'Requested', 'Approve Qty', 'Subtotal'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">{h}</th>
+                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -629,6 +632,7 @@ export default function AssignedStores() {
                 ))}
               </tbody>
             </table>
+            </div>
 
             <div className="flex items-center justify-between mb-5">
               <span className="text-sm text-gray-500">Approved Total</span>

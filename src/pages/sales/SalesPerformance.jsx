@@ -24,10 +24,10 @@ export default function SalesPerformance() {
   // Find unique stores
   const uniqueStores = new Set(performance.map(p => p.shop?.id)).size
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+  if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <div className="mb-6">
         <h2 className="text-lg font-semibold text-gray-900">My Sales Performance</h2>
         <p className="text-sm text-gray-500 mt-0.5">
@@ -57,12 +57,12 @@ export default function SalesPerformance() {
           <h3 className="font-semibold text-gray-800 text-sm">Order Log</h3>
           <span className="text-xs text-gray-500 font-medium">Includes past and active store orders</span>
         </div>
-        
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[480px]">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               {['Order ID', 'Store Name', 'Order Date', 'Status', 'Order Amount'].map((h) => (
-                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
                   {h}
                 </th>
               ))}
@@ -87,6 +87,7 @@ export default function SalesPerformance() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   )

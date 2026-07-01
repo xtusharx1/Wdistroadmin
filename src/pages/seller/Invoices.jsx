@@ -67,21 +67,22 @@ export default function SellerInvoices() {
 
   const storeMap = stores.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+  if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-6">
+    <div className="p-4 sm:p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-5">Invoice History</h2>
       <p className="text-sm text-gray-500 mb-4">
         Invoices are automatically generated when an order is dispatched, delivered, or completed.
       </p>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               {['Order ID', 'Store', 'Items', 'Total', 'Status', 'Delivery Date', 'Invoice'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
                   {h}
                 </th>
               ))}
@@ -113,6 +114,7 @@ export default function SellerInvoices() {
             ))}
           </tbody>
         </table>
+        </div>
         {orders.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-10">No invoices yet</p>
         )}
@@ -167,7 +169,7 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onA
   return (
     <div>
       {/* Header */}
-      <div className="flex items-start justify-between mb-5">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Invoice #{invoice.id}</p>
           <p className="text-sm text-gray-500 mt-0.5">Generated: {new Date(invoice.generated_at).toLocaleString('en-US')}</p>
@@ -175,7 +177,7 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onA
             {badge.label}
           </span>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           {invoice.pdf_url && (
             <a href={invoice.pdf_url} target="_blank" rel="noreferrer"
               className="text-xs px-3 py-1.5 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors inline-flex items-center">
@@ -194,7 +196,7 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onA
       </div>
 
       {/* Order Info */}
-      <div className="grid grid-cols-2 gap-3 p-4 bg-gray-50 rounded-lg mb-4 text-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-gray-50 rounded-lg mb-4 text-sm">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Order</p>
           <p className="font-medium mt-0.5">WS-{order.id}</p>
@@ -214,11 +216,12 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onA
       </div>
 
       {/* Items */}
-      <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden mb-4">
+      <div className="overflow-x-auto mb-4">
+      <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden min-w-[520px]">
         <thead className="bg-gray-50">
           <tr>
             {['Product Name', 'SKU ID', 'Qty', 'Original Price', 'Discount', 'Final Price', 'Total'].map((h) => (
-              <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">{h}</th>
+              <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
             ))}
           </tr>
         </thead>
@@ -236,6 +239,7 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onA
           ))}
         </tbody>
       </table>
+      </div>
 
       {/* Totals */}
       <div className="flex justify-end p-4 bg-gray-50 rounded-lg mb-4">
@@ -251,7 +255,7 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onA
       {/* Payment Summary */}
       <div className="p-4 border border-gray-200 rounded-lg mb-4 bg-gray-50">
         <h5 className="text-sm font-semibold text-gray-900 mb-3">Payment Summary</h5>
-        <div className="grid grid-cols-3 gap-3 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
           <div className="text-center p-2.5 bg-white rounded-lg border border-gray-200">
             <p className="text-xs text-gray-400 mb-1">Invoice Total</p>
             <p className="font-bold text-gray-900">{fmt(invoice.final_amount)}</p>
@@ -271,12 +275,12 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onA
       {payments.length > 0 && (
         <div className="mb-4">
           <h5 className="text-sm font-semibold text-gray-900 mb-2">Payment History</h5>
-          <div className="border border-gray-200 rounded-lg overflow-hidden">
-            <table className="w-full text-xs">
+          <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+            <table className="w-full text-xs min-w-[480px]">
               <thead className="bg-gray-50">
                 <tr>
                   {['Date & Time', 'Method', 'Amount', 'Ref No', 'Verified By', 'Remarks'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left font-medium text-gray-500">{h}</th>
+                    <th key={h} className="px-3 py-2 text-left font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -336,7 +340,7 @@ function PaymentForm({ invoiceId, remaining, onAddPayment, settling }) {
     <div className="border border-gray-200 rounded-lg p-4 bg-white">
       <h5 className="text-sm font-semibold text-gray-900 mb-3">Record Payment</h5>
       <div className="space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="text-xs font-medium text-gray-500 block mb-1">Payment Method <span className="text-red-500">*</span></label>
             <select value={method} onChange={(e) => setMethod(e.target.value)}

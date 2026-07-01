@@ -46,10 +46,10 @@ export default function AdminSalesPerformance() {
     e.email.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+  if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-6 h-[calc(100vh-64px)] flex flex-col">
+    <div className="p-4 sm:p-6 flex flex-col">
       <div className="mb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">Sales Executive Performance</h2>
@@ -66,13 +66,13 @@ export default function AdminSalesPerformance() {
         />
       </div>
 
-      <div className="flex-1 flex gap-6 min-h-0 overflow-hidden">
+      <div className="flex flex-col lg:flex-row gap-4 lg:gap-6">
         {/* Left Pane: Salesperson Master List */}
-        <div className="w-80 shrink-0 bg-white border border-gray-200 rounded-lg flex flex-col overflow-hidden">
+        <div className="w-full lg:w-80 lg:shrink-0 bg-white border border-gray-200 rounded-lg flex flex-col overflow-hidden">
           <div className="bg-gray-50 border-b border-gray-200 px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">
             Sales Executives
           </div>
-          <div className="flex-1 overflow-y-auto divide-y divide-gray-100">
+          <div className="overflow-y-auto max-h-64 lg:max-h-none lg:flex-1 divide-y divide-gray-100">
             {filteredExecutives.map((exec) => {
               const stats = getExecStats(exec.id)
               const isSelected = exec.id === selectedExecId
@@ -100,11 +100,11 @@ export default function AdminSalesPerformance() {
         </div>
 
         {/* Right Pane: Salesperson Detail View */}
-        <div className="flex-1 bg-white border border-gray-200 rounded-lg flex flex-col overflow-hidden">
+        <div className="flex-1 min-w-0 bg-white border border-gray-200 rounded-lg flex flex-col overflow-hidden">
           {selectedExec ? (
             <div className="flex-1 flex flex-col min-h-0">
               {/* Header Details */}
-              <div className="border-b border-gray-200 px-6 py-4 bg-gray-50 flex items-center justify-between">
+              <div className="border-b border-gray-200 px-4 sm:px-6 py-4 bg-gray-50 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <h3 className="font-semibold text-gray-900 text-base">{selectedExec.name}</h3>
                   <p className="text-xs text-gray-500">{selectedExec.email} {selectedExec.phone && `• ${selectedExec.phone}`}</p>
@@ -122,12 +122,12 @@ export default function AdminSalesPerformance() {
               </div>
 
               {/* Orders Table */}
-              <div className="flex-1 overflow-y-auto min-h-0">
-                <table className="w-full text-sm">
+              <div className="flex-1 overflow-auto min-h-0">
+                <table className="w-full text-sm min-w-[500px]">
                   <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                     <tr>
                       {['Order ID', 'Store Name', 'Date', 'Status', 'Order Amount'].map((h) => (
-                        <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
                           {h}
                         </th>
                       ))}

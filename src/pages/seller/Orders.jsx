@@ -329,11 +329,11 @@ export default function SellerOrders() {
 
   const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
 
-  if (loading) return <div className="p-6 text-sm text-gray-400">Loading…</div>
+  if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <h2 className="text-lg font-semibold text-gray-900">Orders</h2>
         <span className="text-sm text-gray-500">
           {orders.filter((o) => o.status === 'pending').length} pending
@@ -374,11 +374,12 @@ export default function SellerOrders() {
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[620px]">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               {['Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Actions'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
                   {h}
                 </th>
               ))}
@@ -450,6 +451,7 @@ export default function SellerOrders() {
             ))}
           </tbody>
         </table>
+        </div>
         {visible.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-10">No orders in this category</p>
         )}
@@ -459,7 +461,7 @@ export default function SellerOrders() {
       <Modal open={!!detailModal} onClose={() => setDetailModal(null)} title={`Order WS-${detailModal?.id}`} size="lg">
         {detailModal && (
           <div>
-            <div className="grid grid-cols-2 gap-3 mb-5 text-sm">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 text-sm">
               {[
                 ['Store', storeMap[detailModal.shop_id] || `Store #${detailModal.shop_id}`],
                 ['Status', null],
@@ -481,7 +483,7 @@ export default function SellerOrders() {
             </div>
 
             {/* Invoice Section */}
-            <div className="mt-4 mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
+            <div className="mt-4 mb-6 p-4 bg-gray-50 border border-gray-200 rounded-lg flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
                 <h4 className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
                   <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -495,7 +497,7 @@ export default function SellerOrders() {
                    'No invoice generated for this order yet.'}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {loadingInvoice ? (
                   <span className="text-xs text-gray-400">Loading...</span>
                 ) : invoice?.pdf_url ? (
@@ -537,11 +539,12 @@ export default function SellerOrders() {
               </div>
             </div>
 
-            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[400px]">
               <thead className="bg-gray-50">
                 <tr>
                   {['Product', 'Price', 'Requested', 'Approved', 'Subtotal'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">{h}</th>
+                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -574,6 +577,7 @@ export default function SellerOrders() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </Modal>
@@ -592,11 +596,12 @@ export default function SellerOrders() {
               recalculate the order total.
             </p>
 
-            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden mb-4">
+            <div className="overflow-x-auto mb-4">
+            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[520px]">
               <thead className="bg-gray-50">
                 <tr>
                   {['Product', 'Unit Price', 'Custom Price', 'Requested', 'Approve Qty', 'Subtotal'].map((h) => (
-                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">{h}</th>
+                    <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -641,6 +646,7 @@ export default function SellerOrders() {
                 ))}
               </tbody>
             </table>
+            </div>
 
             <div className="flex items-center justify-between mb-5">
               <span className="text-sm text-gray-500">Approved Total</span>
@@ -676,7 +682,7 @@ export default function SellerOrders() {
         {editModal && (
           <div>
             {/* Order context bar */}
-            <div className="flex items-center gap-4 mb-5 pb-4 border-b border-gray-100 text-sm">
+            <div className="flex flex-wrap items-center gap-4 mb-5 pb-4 border-b border-gray-100 text-sm">
               <div>
                 <span className="text-xs text-gray-400 uppercase tracking-wide mr-1.5">Store</span>
                 <span className="font-medium">{storeMap[editModal.order.shop_id] || `Store #${editModal.order.shop_id}`}</span>
@@ -695,11 +701,12 @@ export default function SellerOrders() {
             {editModal.items.length === 0 ? (
               <p className="text-sm text-gray-400 italic mb-4">No items. Add at least one product below.</p>
             ) : (
-              <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden mb-4">
+              <div className="overflow-x-auto mb-4">
+              <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[500px]">
                 <thead className="bg-gray-50">
                   <tr>
                     {['Product', 'List Price', 'Selling Price', 'Qty', 'Subtotal', ''].map((h) => (
-                      <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500">{h}</th>
+                      <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -753,6 +760,7 @@ export default function SellerOrders() {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
 
             {/* Add Product panel */}

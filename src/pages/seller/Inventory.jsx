@@ -145,15 +145,15 @@ export default function Inventory() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex items-center justify-between mb-5">
+    <div className="p-4 sm:p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <h2 className="text-lg font-semibold text-gray-900">Inventory / Stock</h2>
         <input
           type="text"
           placeholder="Search product name…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-60"
+          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-60"
         />
       </div>
 
@@ -187,11 +187,12 @@ export default function Inventory() {
       </div>
 
       <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full text-sm min-w-[560px]">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               {['S.No', 'Image', 'Name', 'Category', 'Price', 'Stock Qty', 'Save'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">
+                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
                   {h}
                 </th>
               ))}
@@ -222,6 +223,7 @@ export default function Inventory() {
             )}
           </tbody>
         </table>
+        </div>
 
         {/* Server-side Pagination Controls */}
         {pagination.totalPages > 1 && (
