@@ -9,13 +9,13 @@ export default function FeaturedProducts() {
   const [featured, setFeatured] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [removing, setRemoving] = useState(null)
 
-  // Add dialog state
   const [addOpen, setAddOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState([])
   const [searching, setSearching] = useState(false)
-  const [selected, setSelected] = useState(new Set()) // product ids to add
+  const [selected, setSelected] = useState(new Set())
   const [adding, setAdding] = useState(false)
   const [addError, setAddError] = useState(null)
 
@@ -36,7 +36,6 @@ export default function FeaturedProducts() {
 
   useEffect(() => { loadFeatured() }, [loadFeatured])
 
-  // Debounced product search inside the dialog
   useEffect(() => {
     if (!addOpen) return
     clearTimeout(debounceRef.current)
@@ -86,11 +85,14 @@ export default function FeaturedProducts() {
   }
 
   const handleRemove = async (id) => {
+    setRemoving(id)
     try {
       await updateProduct(id, { is_featured: false })
       await loadFeatured()
     } catch {
       setError('Failed to remove product from featured.')
+    } finally {
+      setRemoving(null)
     }
   }
 
@@ -101,121 +103,165 @@ export default function FeaturedProducts() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Featured Products</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Products highlighted on the mobile app home page.
-          </p>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl font-bold text-gray-900">Featured Products</h1>
+            {!loading && featured.length > 0 && (
+              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
+                {featured.length}
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-gray-500 mt-0.5">Products highlighted on the mobile app home page.</p>
         </div>
         <button
           onClick={openAddDialog}
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-md hover:bg-indigo-700 transition-colors self-start sm:self-auto"
+          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm self-start sm:self-auto"
         >
-          + Add Featured Product
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+          </svg>
+          Add Featured Product
         </button>
       </div>
 
       {error && (
-        <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-md text-sm text-red-700">
+        <div className="mb-5 flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           {error}
         </div>
       )}
 
-      {/* Featured Products Table */}
+      {/* Card Grid */}
       {loading ? (
-        <div className="text-center py-16 text-sm text-gray-400">Loading featured products…</div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="bg-white border border-gray-100 rounded-xl overflow-hidden animate-pulse">
+              <div className="h-44 bg-gray-100" />
+              <div className="p-4 space-y-2">
+                <div className="h-3 bg-gray-100 rounded w-1/3" />
+                <div className="h-4 bg-gray-100 rounded w-4/5" />
+                <div className="h-4 bg-gray-100 rounded w-3/5" />
+                <div className="h-3 bg-gray-100 rounded w-1/2 mt-3" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : featured.length === 0 ? (
-        <div className="text-center py-16 border border-dashed border-gray-200 rounded-lg">
-          <p className="text-sm font-medium text-gray-500">No featured products yet.</p>
-          <p className="text-xs text-gray-400 mt-1">Click "Add Featured Product" to get started.</p>
+        <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+          <div className="w-12 h-12 rounded-full bg-indigo-50 flex items-center justify-center mb-3">
+            <svg className="w-6 h-6 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.562.562 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z" />
+            </svg>
+          </div>
+          <p className="text-sm font-semibold text-gray-600">No featured products yet</p>
+          <p className="text-xs text-gray-400 mt-1 mb-4">Add products to feature them on the mobile app home screen.</p>
+          <button
+            onClick={openAddDialog}
+            className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors"
+          >
+            Add Featured Product
+          </button>
         </div>
       ) : (
-        <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
-          <table className="min-w-full text-sm" style={{ minWidth: '700px' }}>
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide w-16">Image</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Product Name</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">SKU</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide">Category</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Price</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Clearance</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock</th>
-                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-500 uppercase tracking-wide">Status</th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wide">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 bg-white">
-              {featured.map(product => (
-                <tr key={product.id} className="hover:bg-gray-50">
-                  {/* Image */}
-                  <td className="px-4 py-3">
-                    {product.image_url ? (
-                      <img
-                        src={product.image_url}
-                        alt={product.name}
-                        className="w-10 h-10 object-cover rounded-md border border-gray-200"
-                      />
-                    ) : (
-                      <div className="w-10 h-10 rounded-md bg-indigo-50 border border-indigo-100 flex items-center justify-center">
-                        <span className="text-xs font-bold text-indigo-400">
-                          {product.name?.charAt(0)?.toUpperCase() ?? '?'}
-                        </span>
-                      </div>
-                    )}
-                  </td>
-
-                  {/* Name */}
-                  <td className="px-4 py-3">
-                    <span className="font-medium text-gray-900 line-clamp-2">{product.name}</span>
-                  </td>
-
-                  {/* SKU */}
-                  <td className="px-4 py-3 text-gray-500">{product.sku_id || '—'}</td>
-
-                  {/* Category */}
-                  <td className="px-4 py-3 text-gray-500">{product.sub_category}</td>
-
-                  {/* Price */}
-                  <td className="px-4 py-3 text-right font-medium text-gray-900">{fmt(product.price)}</td>
-
-                  {/* Clearance Price */}
-                  <td className="px-4 py-3 text-right">
-                    {product.is_clearance && product.clearance_price ? (
-                      <span className="text-orange-600 font-semibold">{fmt(product.clearance_price)}</span>
-                    ) : (
-                      <span className="text-gray-300">—</span>
-                    )}
-                  </td>
-
-                  {/* Stock */}
-                  <td className="px-4 py-3 text-right">
-                    <span className={product.stock_quantity === 0 ? 'text-red-600 font-semibold' : product.stock_quantity < 10 ? 'text-amber-600 font-medium' : 'text-gray-700'}>
-                      {product.stock_quantity}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {featured.map(product => (
+            <div key={product.id} className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-200 hover:shadow-md transition-all duration-200">
+              {/* Image */}
+              <div className="relative h-44 bg-gray-50">
+                {product.image_url ? (
+                  <img
+                    src={product.image_url}
+                    alt={product.name}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 to-indigo-100">
+                    <span className="text-4xl font-black text-indigo-200 select-none">
+                      {product.name?.charAt(0)?.toUpperCase() ?? '?'}
                     </span>
-                  </td>
+                  </div>
+                )}
 
-                  {/* Status */}
-                  <td className="px-4 py-3 text-center">
-                    <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold ${
-                      product.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                    }`}>
-                      {product.is_active ? 'Active' : 'Inactive'}
+                {/* Badges */}
+                <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
+                  {product.is_clearance && (
+                    <span className="px-2 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded-md shadow-sm tracking-wide">
+                      SALE
                     </span>
-                  </td>
+                  )}
+                  {!product.is_active && (
+                    <span className="px-2 py-0.5 bg-gray-700/80 text-white text-[10px] font-bold rounded-md shadow-sm tracking-wide">
+                      INACTIVE
+                    </span>
+                  )}
+                </div>
 
-                  {/* Actions */}
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => handleRemove(product.id)}
-                      className="text-xs text-red-600 hover:text-red-800 font-medium"
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                {/* Remove on hover */}
+                <button
+                  onClick={() => handleRemove(product.id)}
+                  disabled={removing === product.id}
+                  className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white shadow-md text-gray-400 hover:text-red-500 hover:shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 disabled:opacity-50"
+                  title="Remove from featured"
+                >
+                  {removing === product.id ? (
+                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                    </svg>
+                  ) : (
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  )}
+                </button>
+              </div>
+
+              {/* Info */}
+              <div className="p-4">
+                <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider mb-1">{product.sub_category}</p>
+                <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug mb-3">{product.name}</p>
+
+                {/* Price row */}
+                <div className="flex items-end gap-2 mb-3">
+                  {product.is_clearance && product.clearance_price ? (
+                    <>
+                      <span className="text-base font-bold text-orange-600">{fmt(product.clearance_price)}</span>
+                      <span className="text-xs text-gray-400 line-through mb-0.5">{fmt(product.price)}</span>
+                    </>
+                  ) : (
+                    <span className="text-base font-bold text-gray-900">{fmt(product.price)}</span>
+                  )}
+                </div>
+
+                {/* Meta row */}
+                <div className="flex items-center justify-between text-xs text-gray-400 mb-3">
+                  <span>{product.sku_id || <span className="italic">No SKU</span>}</span>
+                  <span className={
+                    product.stock_quantity === 0 ? 'text-red-500 font-medium' :
+                    product.stock_quantity < 10 ? 'text-amber-500 font-medium' :
+                    'text-gray-400'
+                  }>
+                    {product.stock_quantity === 0 ? 'Out of stock' : `${product.stock_quantity} in stock`}
+                  </span>
+                </div>
+
+                {/* Footer */}
+                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${product.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${product.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
+                    {product.is_active ? 'Active' : 'Inactive'}
+                  </span>
+                  <button
+                    onClick={() => handleRemove(product.id)}
+                    disabled={removing === product.id}
+                    className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors disabled:opacity-40"
+                  >
+                    {removing === product.id ? 'Removing…' : 'Remove'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -225,7 +271,11 @@ export default function FeaturedProducts() {
           <div className="flex flex-col" style={{ maxHeight: '70vh' }}>
             <div className="flex items-center justify-between mb-4 shrink-0">
               <h2 className="text-base font-bold text-gray-900">Add Featured Product</h2>
-              <span className="text-xs text-gray-400">{selected.size} selected</span>
+              {selected.size > 0 && (
+                <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
+                  {selected.size} selected
+                </span>
+              )}
             </div>
 
             <input
@@ -241,12 +291,11 @@ export default function FeaturedProducts() {
               <p className="mb-2 text-xs text-red-600 shrink-0">{addError}</p>
             )}
 
-            {/* Results */}
-            <div className="overflow-y-auto flex-1 border border-gray-200 rounded-md divide-y divide-gray-100">
+            <div className="overflow-y-auto flex-1 border border-gray-200 rounded-lg divide-y divide-gray-100">
               {searching ? (
-                <p className="text-center text-sm text-gray-400 py-6">Searching…</p>
+                <p className="text-center text-sm text-gray-400 py-8">Searching…</p>
               ) : searchResults.length === 0 ? (
-                <p className="text-center text-sm text-gray-400 py-6">
+                <p className="text-center text-sm text-gray-400 py-8">
                   {searchQuery ? 'No products found.' : 'Type to search products.'}
                 </p>
               ) : (
@@ -256,7 +305,7 @@ export default function FeaturedProducts() {
                   return (
                     <label
                       key={product.id}
-                      className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer select-none transition-colors ${
+                      className={`flex items-center gap-3 px-4 py-3 cursor-pointer select-none transition-colors ${
                         alreadyFeatured ? 'opacity-40 cursor-not-allowed bg-gray-50' : isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50'
                       }`}
                     >
@@ -265,21 +314,28 @@ export default function FeaturedProducts() {
                         checked={isSelected}
                         disabled={alreadyFeatured}
                         onChange={() => !alreadyFeatured && toggleSelect(product.id)}
-                        className="accent-indigo-600"
+                        className="accent-indigo-600 w-4 h-4 shrink-0"
                       />
                       {product.image_url ? (
-                        <img src={product.image_url} alt="" className="w-9 h-9 rounded object-cover border border-gray-200 shrink-0" />
+                        <img src={product.image_url} alt="" className="w-10 h-10 rounded-lg object-cover border border-gray-200 shrink-0" />
                       ) : (
-                        <div className="w-9 h-9 rounded bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
-                          <span className="text-xs font-bold text-indigo-400">{product.name?.charAt(0)?.toUpperCase()}</span>
+                        <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                          <span className="text-sm font-bold text-indigo-400">{product.name?.charAt(0)?.toUpperCase()}</span>
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
-                        <p className="text-xs text-gray-400">{product.sub_category} · {product.is_clearance ? `${fmt(product.clearance_price)} clearance` : fmt(product.price)}</p>
+                        <p className="text-sm font-semibold text-gray-800 truncate">{product.name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {product.sub_category}
+                          <span className="mx-1.5">·</span>
+                          {product.is_clearance && product.clearance_price
+                            ? <span className="text-orange-500 font-medium">{fmt(product.clearance_price)} sale</span>
+                            : <span className="font-medium text-gray-600">{fmt(product.price)}</span>
+                          }
+                        </p>
                       </div>
                       {alreadyFeatured && (
-                        <span className="text-xs text-indigo-500 font-medium shrink-0">Featured</span>
+                        <span className="text-xs text-indigo-500 font-semibold shrink-0">Featured</span>
                       )}
                     </label>
                   )
@@ -290,16 +346,16 @@ export default function FeaturedProducts() {
             <div className="flex justify-end gap-2 mt-4 shrink-0">
               <button
                 onClick={() => setAddOpen(false)}
-                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleAddFeatured}
                 disabled={selected.size === 0 || adding}
-                className="px-4 py-2 text-sm font-medium bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-4 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               >
-                {adding ? 'Adding…' : `Add ${selected.size > 0 ? `(${selected.size})` : ''}`}
+                {adding ? 'Adding…' : selected.size > 0 ? `Add ${selected.size} Product${selected.size > 1 ? 's' : ''}` : 'Add'}
               </button>
             </div>
           </div>
