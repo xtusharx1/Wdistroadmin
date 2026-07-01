@@ -136,7 +136,7 @@ export default function FeaturedProducts() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => (
             <div key={i} className="bg-white border border-gray-100 rounded-xl overflow-hidden animate-pulse">
-              <div className="h-44 bg-gray-100" />
+              <div className="h-40 bg-gray-100" />
               <div className="p-4 space-y-2">
                 <div className="h-3 bg-gray-100 rounded w-1/3" />
                 <div className="h-4 bg-gray-100 rounded w-4/5" />
@@ -167,15 +167,16 @@ export default function FeaturedProducts() {
           {featured.map(product => (
             <div key={product.id} className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-200 hover:shadow-md transition-all duration-200">
               {/* Image */}
-              <div className="relative h-44 bg-gray-50">
+              <div className="relative h-40 bg-white flex items-center justify-center p-3 border-b border-gray-100">
                 {product.image_url ? (
                   <img
                     src={product.image_url}
                     alt={product.name}
-                    className="w-full h-full object-contain"
+                    className="max-h-full max-w-full object-contain"
+                    style={{ maxHeight: '136px' }}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 to-indigo-100">
+                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-md">
                     <span className="text-4xl font-black text-indigo-200 select-none">
                       {product.name?.charAt(0)?.toUpperCase() ?? '?'}
                     </span>

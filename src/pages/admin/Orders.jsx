@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { getOrders, getShops, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment } from '../../api'
+import { useState, useEffect, useRef } from 'react'
+import { getOrders, getShops, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment, editOrder, getProducts } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import Modal from '../../components/Modal'
 
@@ -15,6 +15,8 @@ const NEXT_STATUS = {
   approved: ['dispatched'],
   dispatched: ['delivered'],
 }
+
+const EDITABLE_STATUSES = ['pending', 'approved']
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState([])
@@ -137,8 +139,109 @@ export default function AdminOrders() {
 
   const [processModal, setProcessModal] = useState(null)
 
+  // Edit order state
+  const [editModal, setEditModal] = useState(null)
+  const [editItems, setEditItems] = useState([])
+  const [editSearch, setEditSearch] = useState('')
+  const [editSearchResults, setEditSearchResults] = useState([])
+  const [editSearching, setEditSearching] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [editError, setEditError] = useState(null)
+  const editDebounceRef = useRef(null)
+
+  // Debounced product search for edit modal
+  useEffect(() => {
+    if (!editModal) return
+    clearTimeout(editDebounceRef.current)
+    if (!editSearch.trim()) {
+      setEditSearchResults([])
+      return
+    }
+    editDebounceRef.current = setTimeout(async () => {
+      setEditSearching(true)
+      try {
+        const res = await getProducts({ search: editSearch, limit: 20, page: 1 })
+        setEditSearchResults(res.data.data.products)
+      } catch {
+        setEditSearchResults([])
+      } finally {
+        setEditSearching(false)
+      }
+    }, 350)
+    return () => clearTimeout(editDebounceRef.current)
+  }, [editSearch, editModal])
+
   const refresh = () => {
     getOrders().then((res) => setOrders(res.data.data.orders || []))
+  }
+
+  const openEdit = (order) => {
+    setEditItems(
+      (order.OrderItems || []).map((item) => ({
+        product_id: item.product_id,
+        name: item.Product?.name || `Product #${item.product_id}`,
+        unit: item.Product?.unit || '',
+        price: item.price,
+        stock_quantity: item.Product?.stock_quantity ?? 0,
+        quantity: item.approved_qty ?? item.requested_qty,
+      }))
+    )
+    setEditSearch('')
+    setEditSearchResults([])
+    setEditError(null)
+    setEditModal(order)
+  }
+
+  const handleEditAdd = (product) => {
+    setEditItems((prev) => {
+      const existing = prev.find((i) => i.product_id === product.id)
+      if (existing) {
+        return prev.map((i) =>
+          i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i
+        )
+      }
+      return [
+        ...prev,
+        {
+          product_id: product.id,
+          name: product.name,
+          unit: product.unit || '',
+          price: product.price,
+          stock_quantity: product.stock_quantity,
+          quantity: 1,
+        },
+      ]
+    })
+  }
+
+  const handleEditQty = (product_id, value) => {
+    const qty = parseInt(value)
+    if (isNaN(qty) || qty < 1) return
+    setEditItems((prev) =>
+      prev.map((i) => (i.product_id === product_id ? { ...i, quantity: qty } : i))
+    )
+  }
+
+  const submitEdit = async () => {
+    if (editItems.length === 0) {
+      setEditError('Order must have at least one item.')
+      return
+    }
+    setSavingEdit(true)
+    setEditError(null)
+    try {
+      await editOrder(
+        editModal.id,
+        editItems.map(({ product_id, quantity }) => ({ product_id, quantity }))
+      )
+      notify('Order updated successfully.')
+      setEditModal(null)
+      refresh()
+    } catch (err) {
+      setEditError(err.response?.data?.message || 'Failed to update order. Please try again.')
+    } finally {
+      setSavingEdit(false)
+    }
   }
 
   const openProcess = (order) => {
@@ -326,6 +429,14 @@ export default function AdminOrders() {
                         {ns === 'approved' ? 'Approve' : ns === 'dispatched' ? 'Dispatch' : 'Mark Delivered'}
                       </button>
                     ))}
+                    {EDITABLE_STATUSES.includes(o.status) && (
+                      <button
+                        onClick={() => openEdit(o)}
+                        className="text-xs px-2.5 py-1 rounded bg-amber-50 hover:bg-amber-100 text-amber-700 font-medium transition-colors border border-amber-200"
+                      >
+                        Edit
+                      </button>
+                    )}
                     {(o.status === 'approved' || o.status === 'dispatched' || o.status === 'delivered') && (
                       <button
                         onClick={() => setDetail(o)}
@@ -623,6 +734,194 @@ export default function AdminOrders() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Edit Order Modal */}
+      <Modal
+        open={!!editModal}
+        onClose={() => setEditModal(null)}
+        title={`Edit Order WS-${editModal?.id}`}
+        size="xl"
+      >
+        {editModal && (() => {
+          const editTotal = editItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+          return (
+            <div className="space-y-5">
+              {editError && (
+                <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  {editError}
+                </div>
+              )}
+
+              {/* Current Items */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Order Items</h4>
+                  <span className="text-xs text-gray-400">{editItems.length} item{editItems.length !== 1 ? 's' : ''}</span>
+                </div>
+
+                {editItems.length === 0 ? (
+                  <div className="text-center py-6 border border-dashed border-gray-200 rounded-lg">
+                    <p className="text-sm text-gray-400">No items. Search and add products below.</p>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-lg overflow-hidden overflow-x-auto">
+                    <table className="w-full text-sm min-w-[520px]">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          {['Product', 'Unit Price', 'Stock', 'Quantity', 'Subtotal', ''].map((h) => (
+                            <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {editItems.map((item) => (
+                          <tr key={item.product_id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2.5 font-medium text-gray-900">
+                              {item.name}
+                              {item.unit && <span className="ml-1 text-xs text-gray-400">/ {item.unit}</span>}
+                            </td>
+                            <td className="px-3 py-2.5 text-gray-600">{fmt(item.price)}</td>
+                            <td className="px-3 py-2.5">
+                              <span className={`text-xs font-medium ${
+                                item.stock_quantity === 0 ? 'text-red-500' :
+                                item.stock_quantity < 10 ? 'text-amber-500' : 'text-gray-400'
+                              }`}>
+                                {item.stock_quantity === 0 ? 'Out of stock' : `${item.stock_quantity} avail.`}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => setEditItems((prev) =>
+                                    prev.map((i) => i.product_id === item.product_id ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i)
+                                  )}
+                                  className="w-7 h-7 flex items-center justify-center border border-gray-300 rounded-md text-gray-600 hover:bg-gray-100 transition-colors font-bold"
+                                >−</button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  value={item.quantity}
+                                  onChange={(e) => handleEditQty(item.product_id, e.target.value)}
+                                  className="w-14 text-center border border-gray-300 rounded-md px-1 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                />
+                                <button
+                                  onClick={() => setEditItems((prev) =>
+                                    prev.map((i) => i.product_id === item.product_id ? { ...i, quantity: i.quantity + 1 } : i)
+                                  )}
+                                  className="w-7 h-7 flex items-center justify-center border border-gray-300 rounded-md text-gray-600 hover:bg-gray-100 transition-colors font-bold"
+                                >+</button>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 font-semibold text-gray-900">{fmt(item.price * item.quantity)}</td>
+                            <td className="px-3 py-2.5">
+                              <button
+                                onClick={() => setEditItems((prev) => prev.filter((i) => i.product_id !== item.product_id))}
+                                className="text-gray-300 hover:text-red-500 transition-colors"
+                                title="Remove item"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                </svg>
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+
+              {/* Add Products */}
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Add Products</h4>
+                <input
+                  type="text"
+                  placeholder="Search products by name…"
+                  value={editSearch}
+                  onChange={(e) => setEditSearch(e.target.value)}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                />
+                {editSearch.trim() && (
+                  <div className="mt-1.5 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-52 overflow-y-auto">
+                    {editSearching ? (
+                      <p className="text-center text-sm text-gray-400 py-5">Searching…</p>
+                    ) : editSearchResults.length === 0 ? (
+                      <p className="text-center text-sm text-gray-400 py-5">No products found.</p>
+                    ) : (
+                      editSearchResults.map((product) => {
+                        const alreadyIn = editItems.some((i) => i.product_id === product.id)
+                        return (
+                          <div key={product.id} className="flex items-center gap-3 px-3 py-2.5 hover:bg-gray-50 transition-colors">
+                            {product.image_url ? (
+                              <img src={product.image_url} alt="" className="w-9 h-9 rounded-md object-contain border border-gray-100 bg-white shrink-0" />
+                            ) : (
+                              <div className="w-9 h-9 rounded-md bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                                <span className="text-xs font-bold text-indigo-400">{product.name?.charAt(0)?.toUpperCase()}</span>
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-800 truncate">{product.name}</p>
+                              <p className="text-xs text-gray-400 mt-0.5">
+                                <span className="font-medium text-gray-600">{fmt(product.price)}</span>
+                                <span className="mx-1.5">·</span>
+                                <span className={
+                                  product.stock_quantity === 0 ? 'text-red-500 font-medium' :
+                                  product.stock_quantity < 10 ? 'text-amber-500 font-medium' : ''
+                                }>
+                                  {product.stock_quantity === 0 ? 'Out of stock' : `${product.stock_quantity} in stock`}
+                                </span>
+                                {product.sub_category && <><span className="mx-1.5">·</span>{product.sub_category}</>}
+                              </p>
+                            </div>
+                            <button
+                              onClick={() => handleEditAdd(product)}
+                              disabled={product.stock_quantity === 0}
+                              className={`text-xs px-3 py-1 rounded-md font-semibold transition-colors shrink-0 ${
+                                product.stock_quantity === 0
+                                  ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                                  : alreadyIn
+                                    ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
+                                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                              }`}
+                            >
+                              {alreadyIn ? '+1' : 'Add'}
+                            </button>
+                          </div>
+                        )
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Footer: total + actions */}
+              <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                <div>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Estimated Total</p>
+                  <p className="text-xl font-bold text-indigo-700">{fmt(editTotal)}</p>
+                </div>
+                <div className="flex gap-2.5">
+                  <button
+                    onClick={() => setEditModal(null)}
+                    className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={submitEdit}
+                    disabled={savingEdit || editItems.length === 0}
+                    className="px-5 py-2 text-sm font-semibold bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {savingEdit ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
 
       {/* Process Order Modal */}
