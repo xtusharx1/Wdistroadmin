@@ -294,7 +294,7 @@ export default function FeaturedProducts() {
 
       {/* Add Featured Product Dialog */}
       {addOpen && (
-        <Modal onClose={() => setAddOpen(false)}>
+        <Modal open={true} onClose={() => setAddOpen(false)}>
           <div className="flex flex-col" style={{ maxHeight: '70vh' }}>
             <div className="flex items-center justify-between mb-4 shrink-0">
               <h2 className="text-base font-bold text-gray-900">Add Featured Product</h2>
