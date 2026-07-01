@@ -68,6 +68,7 @@ export const updateOrderStatus = (id, status) =>
   http.patch(`/orders/${id}/status`, { status })
 export const editOrder = (id, items) =>
   http.put(`/orders/${id}/edit`, { items })
+export const getOrderLogs = (orderId) => http.get(`/orders/${orderId}/logs`)
 
 // ── Invoices ────────────────────────────────────────────────────────────────
 export const getInvoice = (orderId) => http.get(`/invoices/${orderId}`)

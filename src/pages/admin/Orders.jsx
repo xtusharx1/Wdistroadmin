@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getOrders, getShops, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment, editOrder, getProducts } from '../../api'
+import { getOrders, getShops, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment, editOrder, getProducts, getOrderLogs } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import Modal from '../../components/Modal'
 
@@ -18,6 +18,27 @@ const NEXT_STATUS = {
 
 const EDITABLE_STATUSES = ['pending', 'approved']
 
+const ACTION_LABELS = {
+  item_added: 'Added',
+  item_removed: 'Removed',
+  quantity_changed: 'Qty Changed',
+  price_changed: 'Price Changed',
+}
+const ACTION_COLORS = {
+  item_added: 'bg-green-50 text-green-700 border-green-200',
+  item_removed: 'bg-red-50 text-red-700 border-red-200',
+  quantity_changed: 'bg-blue-50 text-blue-700 border-blue-200',
+  price_changed: 'bg-purple-50 text-purple-700 border-purple-200',
+}
+const fmtLogVal = (action, val) => {
+  if (!val) return '—'
+  if (action === 'item_added' || action === 'item_removed')
+    return `Qty: ${val.quantity} · ${fmt(val.price)}`
+  if (action === 'quantity_changed') return `${val.quantity} units`
+  if (action === 'price_changed') return fmt(val.price)
+  return JSON.stringify(val)
+}
+
 export default function AdminOrders() {
   const [orders, setOrders] = useState([])
   const [storeMap, setStoreMap] = useState({})
@@ -27,6 +48,10 @@ export default function AdminOrders() {
   const [msg, setMsg] = useState(null)
   const [detail, setDetail] = useState(null)
   const [updating, setUpdating] = useState(null)
+
+  const [detailTab, setDetailTab] = useState('details')
+  const [editLogs, setEditLogs] = useState([])
+  const [loadingLogs, setLoadingLogs] = useState(false)
 
   const [invoice, setInvoice] = useState(null)
   const [loadingInvoice, setLoadingInvoice] = useState(false)
@@ -59,6 +84,8 @@ export default function AdminOrders() {
     setSettleRefNo('')
     setSettleRemarks('')
     setPayments([])
+    setDetailTab('details')
+    setEditLogs([])
     if (detail) {
       setLoadingInvoice(true)
       getInvoice(detail.id)
@@ -74,6 +101,12 @@ export default function AdminOrders() {
         .finally(() => {
           setLoadingInvoice(false)
         })
+
+      setLoadingLogs(true)
+      getOrderLogs(detail.id)
+        .then((res) => setEditLogs(res.data.data.logs || []))
+        .catch(() => setEditLogs([]))
+        .finally(() => setLoadingLogs(false))
     }
   }, [detail])
 
@@ -461,6 +494,85 @@ export default function AdminOrders() {
       <Modal open={!!detail} onClose={() => setDetail(null)} title={`Order WS-${detail?.id}`} size="lg">
         {detail && (
           <div>
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200 mb-5 -mt-1">
+              {[['details', 'Details'], ['history', 'Edit History']].map(([key, label]) => (
+                <button
+                  key={key}
+                  onClick={() => setDetailTab(key)}
+                  className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                    detailTab === key
+                      ? 'border-indigo-600 text-indigo-600'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  }`}
+                >
+                  {label}
+                  {key === 'history' && editLogs.length > 0 && (
+                    <span className="ml-1.5 text-xs bg-indigo-100 text-indigo-600 px-1.5 py-0.5 rounded-full font-semibold">
+                      {editLogs.length}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Edit History Tab */}
+            {detailTab === 'history' && (
+              <div>
+                {loadingLogs ? (
+                  <p className="text-sm text-gray-400 py-8 text-center">Loading history…</p>
+                ) : editLogs.length === 0 ? (
+                  <div className="text-center py-10 text-gray-400">
+                    <svg className="w-8 h-8 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                    <p className="text-sm">No edits recorded for this order.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden min-w-[640px]">
+                      <thead className="bg-gray-50 border-b border-gray-200">
+                        <tr>
+                          {['Date & Time', 'Edited By', 'Action', 'Product', 'Previous Value', 'New Value'].map((h) => (
+                            <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
+                              {h}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {editLogs.map((log) => (
+                          <tr key={log.id} className="hover:bg-gray-50">
+                            <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{fmtTime(log.created_at)}</td>
+                            <td className="px-3 py-2.5">
+                              {log.User ? (
+                                <div>
+                                  <p className="font-medium text-gray-800">{log.User.name}</p>
+                                  <p className="text-xs text-gray-400">{log.User.role}</p>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-full border ${ACTION_COLORS[log.action] || 'bg-gray-50 text-gray-600 border-gray-200'}`}>
+                                {ACTION_LABELS[log.action] || log.action}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2.5 font-medium text-gray-800">{log.product_name || `#${log.product_id}`}</td>
+                            <td className="px-3 py-2.5 text-gray-500">{fmtLogVal(log.action, log.previous_value)}</td>
+                            <td className="px-3 py-2.5 text-gray-800">{fmtLogVal(log.action, log.new_value)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Details Tab */}
+            {detailTab === 'details' && <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 text-sm">
               <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Store</p>
@@ -732,6 +844,7 @@ export default function AdminOrders() {
               </tbody>
             </table>
             </div>
+            </div>}
           </div>
         )}
       </Modal>
