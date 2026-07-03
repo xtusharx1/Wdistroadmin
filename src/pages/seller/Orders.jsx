@@ -550,7 +550,7 @@ export default function SellerOrders() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {(detailModal.OrderItems || []).map((item) => {
-                  const qty = item.approved_qty ?? item.requested_qty
+                  const qty = detailModal.status === 'pending' ? item.requested_qty : (item.approved_qty ?? item.requested_qty)
                   const itemPrice = item.custom_price !== null && item.custom_price !== undefined ? item.custom_price : item.price
                   return (
                     <tr key={item.id}>
@@ -567,8 +567,8 @@ export default function SellerOrders() {
                       </td>
                       <td className="px-3 py-2.5">{item.requested_qty}</td>
                       <td className="px-3 py-2.5">
-                        <span className={item.approved_qty != null && item.approved_qty < item.requested_qty ? 'text-amber-600 font-medium' : ''}>
-                          {item.approved_qty ?? '—'}
+                        <span className={detailModal.status !== 'pending' && item.approved_qty != null && item.approved_qty < item.requested_qty ? 'text-amber-600 font-medium' : ''}>
+                          {detailModal.status === 'pending' ? '—' : (item.approved_qty ?? '—')}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 font-medium">{fmt(itemPrice * qty)}</td>

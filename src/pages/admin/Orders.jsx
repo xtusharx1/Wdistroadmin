@@ -216,7 +216,7 @@ export default function AdminOrders() {
         unit: item.Product?.unit || '',
         price: item.price,
         stock_quantity: item.Product?.stock_quantity ?? 0,
-        quantity: item.approved_qty ?? item.requested_qty,
+        quantity: order.status === 'pending' ? item.requested_qty : (item.approved_qty ?? item.requested_qty),
       }))
     )
     setEditSearch('')
@@ -816,7 +816,7 @@ export default function AdminOrders() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {(detail.OrderItems || []).map((item) => {
-                  const qty = item.approved_qty ?? item.requested_qty
+                  const qty = detail.status === 'pending' ? item.requested_qty : (item.approved_qty ?? item.requested_qty)
                   const itemPrice = item.custom_price !== null && item.custom_price !== undefined ? item.custom_price : item.price
                   return (
                     <tr key={item.id}>
@@ -833,8 +833,8 @@ export default function AdminOrders() {
                       </td>
                       <td className="px-3 py-2.5">{item.requested_qty}</td>
                       <td className="px-3 py-2.5">
-                        <span className={item.approved_qty != null && item.approved_qty < item.requested_qty ? 'text-amber-600 font-medium' : ''}>
-                          {item.approved_qty ?? '—'}
+                        <span className={detail.status !== 'pending' && item.approved_qty != null && item.approved_qty < item.requested_qty ? 'text-amber-600 font-medium' : ''}>
+                          {detail.status === 'pending' ? '—' : (item.approved_qty ?? '—')}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 font-medium">{fmt(itemPrice * qty)}</td>
