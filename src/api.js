@@ -96,3 +96,12 @@ export const createAssignment = (data) => http.post('/sales/assignments', data)
 export const endAssignment = (id, data) => http.patch(`/sales/assignments/${id}`, data)
 export const updateAssignment = (id, data) => http.patch(`/sales/assignments/${id}`, data)
 export const getIncentives = (params) => http.get('/sales/incentives', { params })
+
+// ── Inventory Receiving ──────────────────────────────────────────────────────
+export const getInventoryReceipts = (params) => http.get('/inventory-receiving', { params })
+export const getInventoryReceiptDetails = (id) => http.get(`/inventory-receiving/${id}`)
+export const createInventoryReceipt = (data) => http.post('/inventory-receiving', data)
+export const uploadInvoiceFile = (formData) =>
+  http.post('/inventory-receiving/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
