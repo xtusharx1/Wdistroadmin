@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getAssignments, getUsers, getShops, createAssignment, endAssignment, updateAssignment, getIncentives } from '../../api'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, LoadingState, Dialog as Modal, Field } from '../../components/DesignSystem'
+import StatusBadge from '../../components/StatusBadge'
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
 const today = () => new Date().toISOString().split('T')[0]
@@ -14,6 +15,7 @@ export default function Assignments() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('Active')
   const [createModal, setCreateModal] = useState(false)
+  const [search, setSearch] = useState('')
 
   const [editAssignment, setEditAssignment] = useState(null)
 
@@ -101,31 +103,33 @@ export default function Assignments() {
     }
   }
 
-  const visible =
+  const visible = (
     filter === 'Active'
       ? assignments.filter((a) => !a.end_date)
       : filter === 'Historical'
       ? assignments.filter((a) => !!a.end_date)
       : assignments
+  ).filter((a) => {
+    const q = search.toLowerCase().trim()
+    if (!q) return true
+    const execName = a.SalesExec?.name?.toLowerCase() || ''
+    const storeName = a.Shop?.name?.toLowerCase() || ''
+    return execName.includes(q) || storeName.includes(q)
+  })
 
-  if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
+  if (loading) return <LoadingState message="Loading assignments..." />
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Sales Executive Assignments</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {assignments.filter((a) => !a.end_date).length} active
-          </p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="px-4 py-2 text-sm font-medium rounded-md bg-indigo-600 hover:bg-indigo-700 text-white transition-colors self-start sm:self-auto"
-        >
-          + Assign Store
-        </button>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Sales Executive Assignments"
+        subtitle={`${assignments.filter((a) => !a.end_date).length} active executive assignments`}
+        action={
+          <Button onClick={openCreate}>
+            + Assign Store
+          </Button>
+        }
+      />
 
       {msg && (
         <div
@@ -139,35 +143,30 @@ export default function Assignments() {
         </div>
       )}
 
-      <div className="flex gap-1 mb-4 flex-wrap">
-        {['Active', 'Historical', 'All'].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              filter === f
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
+      <TableToolbar>
+        <FilterBar>
+          {['Active', 'Historical', 'All'].map((f) => (
+            <Button
+              key={f}
+              variant={filter === f ? 'primary' : 'secondary'}
+              onClick={() => setFilter(f)}
+              className="py-1 px-3"
+            >
+              {f}
+            </Button>
+          ))}
+        </FilterBar>
+        <SearchBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by executive or store..."
+        />
+      </TableToolbar>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[600px]">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                {['S.No', 'Sales Executive', 'Assigned Store', 'Start Date', 'End Date', 'Status', 'Actions'].map((h) => (
-                  <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
+      <DataTable
+        headers={['S.No', 'Sales Executive', 'Assigned Store', 'Start Date', 'End Date', 'Status', 'Actions']}
+        empty={visible.length === 0}
+      >
               {visible.map((a, index) => {
                 const isActive = !a.end_date
                 return (
@@ -192,43 +191,35 @@ export default function Assignments() {
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.start_date)}</td>
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.end_date)}</td>
                     <td className="px-4 py-3">
-                      <span
-                        className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                          isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
-                        }`}
-                      >
-                        {isActive ? 'Active' : 'Ended'}
-                      </span>
+                      <StatusBadge status={isActive ? 'active' : 'inactive'} type="user" />
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1.5 flex-wrap">
-                        <button
+                        <Button
+                          variant="outlined"
                           onClick={() => openEdit(a)}
-                          className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors"
+                          className="py-1 px-2 text-2xs"
                         >
                           Edit
-                        </button>
+                        </Button>
                         {isActive && (
-                          <button
+                          <Button
+                            variant="danger"
                             onClick={() => doEnd(a)}
-                            disabled={ending === a.id}
-                            className="text-xs px-2.5 py-1 rounded border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50 transition-colors"
+                            className="py-1 px-2 text-2xs"
                           >
-                            {ending === a.id ? 'Ending…' : 'End'}
-                          </button>
+                            End Assignment
+                          </Button>
                         )}
                       </div>
                     </td>
                   </tr>
                 )
-              })}
-            </tbody>
-          </table>
-        </div>
+            })}
+          </DataTable>
         {visible.length === 0 && (
           <p className="text-center text-gray-400 text-sm py-10">No assignments found</p>
         )}
-      </div>
 
       {/* Create / Edit Assignment Modal */}
       <Modal open={createModal} onClose={() => setCreateModal(false)} title={editAssignment ? 'Edit Store Assignment' : 'Assign Store to Sales Executive'} size="md">
@@ -370,6 +361,6 @@ export default function Assignments() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageLayout>
   )
 }

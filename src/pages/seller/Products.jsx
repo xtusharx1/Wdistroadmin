@@ -1,13 +1,13 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getProducts, createProduct, bulkCreateProducts, updateProduct, deleteProduct, uploadImage } from '../../api'
+import { getProducts, createProduct, bulkCreateProducts, updateProduct, deleteProduct, uploadImage, getCategories, getCollections, importProducts, downloadImportTemplate } from '../../api'
 import { getUser } from '../../auth'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
 import * as XLSX from 'xlsx'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const input = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
 
-const CATEGORY_MAP = {
+const FALLBACK_CATEGORY_MAP = {
   'General Merchandise': ['Cables', 'Toys', 'Misc', 'Clothing', 'Supplements', 'Medicine (OTC)'],
   'Glass': ['Glass Rigs', 'Glass Accessories', 'Grinders'],
   'Tobacco': ['Wraps', 'Cigars', 'Cigarillos', 'Rolling Tobacco', 'Chew/Pouches'],
@@ -116,7 +116,7 @@ const mapCategoryFromText = (name, desc, mainCatInput, subCatInput) => {
   return { mainCat: 'General Merchandise', subCat: 'Misc' };
 }
 
-const blankForm = { name: '', sku_id: '', mainCategory: '', subCategory: '', price: '', purchaseCost: '', stock_quantity: '', image_url: '', description: '', is_active: true, is_clearance: false, clearance_price: '' }
+const blankForm = { name: '', sku_id: '', mainCategory: '', subCategory: '', price: '', purchaseCost: '', stock_quantity: '', image_url: '', description: '', is_active: true, product_collection_id: '', deal_price: '', billing_name: '', is_explicit_product: false }
 
 export default function Products() {
   const user = getUser()
@@ -131,7 +131,19 @@ export default function Products() {
   const [sortOrder, setSortOrder] = useState('desc')
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState(null)
-  const [clearanceFilter, setClearanceFilter] = useState('All') // 'All' | 'Clearance' | 'Regular'
+  const [collectionFilter, setCollectionFilter] = useState('All')
+  const [collections, setCollections] = useState([])
+  const [importOpen, setImportOpen] = useState(false)
+  const [importUploading, setImportUploading] = useState(false)
+  const [importFile, setImportFile] = useState(null)
+  const [updateExisting, setUpdateExisting] = useState(false)
+  const [importResult, setImportResult] = useState(null)
+
+  useEffect(() => {
+    getCollections({ active_only: true })
+      .then(res => setCollections(res.data.data.collections || []))
+      .catch(err => console.error('Error loading collections:', err))
+  }, [])
 
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -143,6 +155,23 @@ export default function Products() {
   const [duplicateModalOpen, setDuplicateModalOpen] = useState(false)
   const [potentialDuplicates, setPotentialDuplicates] = useState([])
   const [pendingPayload, setPendingPayload] = useState(null)
+
+  const [categoryMap, setCategoryMap] = useState(FALLBACK_CATEGORY_MAP)
+
+  useEffect(() => {
+    getCategories({ active_only: true })
+      .then((res) => {
+        const list = res.data.data.categories || []
+        if (list.length > 0) {
+          const map = {}
+          list.forEach(c => {
+            map[c.category_name] = c.sub_categories || []
+          })
+          setCategoryMap(map)
+        }
+      })
+      .catch(err => console.error('Failed to load categories:', err))
+  }, [])
 
   const LIMIT = 15
 
@@ -167,7 +196,7 @@ export default function Products() {
         subCategory: subCategoryFilter !== 'All' ? subCategoryFilter : undefined,
         sortBy,
         sortOrder,
-        clearance: clearanceFilter === 'Clearance' ? 'true' : clearanceFilter === 'Regular' ? 'false' : undefined
+        collection_id: collectionFilter !== 'All' ? collectionFilter : undefined
       })
         .then((res) => {
           setProducts(res.data.data.products || [])
@@ -175,7 +204,7 @@ export default function Products() {
         })
         .finally(() => setLoading(false))
     },
-    [debouncedSearch, categoryFilter, subCategoryFilter, sortBy, sortOrder, clearanceFilter]
+    [debouncedSearch, categoryFilter, subCategoryFilter, sortBy, sortOrder, collectionFilter]
   )
 
   useEffect(() => { load(1) }, [load])
@@ -190,6 +219,20 @@ export default function Products() {
   }
 
   const openEdit = (p) => {
+    const mainCat = p.main_category;
+    const subCat = p.sub_category;
+    if (mainCat) {
+      setCategoryMap(prev => {
+        const updated = { ...prev };
+        if (!updated[mainCat]) {
+          updated[mainCat] = [subCat || 'Misc'];
+        } else if (subCat && !updated[mainCat].includes(subCat)) {
+          updated[mainCat] = [...updated[mainCat], subCat];
+        }
+        return updated;
+      });
+    }
+
     setEditing(p)
     setForm({
       name: p.name,
@@ -202,8 +245,10 @@ export default function Products() {
       image_url: p.image_url || '',
       description: p.description || '',
       is_active: p.is_active !== false,
-      is_clearance: p.is_clearance === true,
-      clearance_price: p.clearance_price != null ? String(p.clearance_price) : ''
+      product_collection_id: p.product_collection_id || '',
+      deal_price: p.deal_price != null ? String(p.deal_price) : '',
+      billing_name: p.billing_name || '',
+      is_explicit_product: p.is_explicit_product === true
     })
     setMsg(null)
     setModalOpen(true)
@@ -237,16 +282,23 @@ export default function Products() {
   const handleSubmit = async (e, bypass = false) => {
     if (e) e.preventDefault()
 
-    // Front-end validation for clearance fields
-    if (form.is_clearance) {
-      const cp = parseFloat(form.clearance_price)
+    // Front-end validation for collection fields
+    if (form.product_collection_id) {
+      const cp = parseFloat(form.deal_price)
       const rp = parseFloat(form.price)
-      if (!form.clearance_price || isNaN(cp) || cp <= 0) {
-        notify('Clearance price must be greater than zero.', 'error')
+      if (!form.deal_price || isNaN(cp) || cp <= 0) {
+        notify('Deal price must be greater than zero.', 'error')
         return
       }
       if (cp >= rp) {
-        notify('Clearance price must be less than the regular selling price.', 'error')
+        notify('Deal price must be less than the regular selling price.', 'error')
+        return
+      }
+    }
+
+    if (form.is_explicit_product) {
+      if (!form.billing_name || !form.billing_name.trim()) {
+        notify('Billing Name is required for explicit products.', 'error')
         return
       }
     }
@@ -265,8 +317,10 @@ export default function Products() {
       description: form.description || undefined,
       is_active: form.is_active,
       bypassDuplicateCheck: bypass,
-      is_clearance: form.is_clearance,
-      clearance_price: form.is_clearance && form.clearance_price !== '' ? parseFloat(form.clearance_price) : null
+      product_collection_id: form.product_collection_id ? parseInt(form.product_collection_id) : null,
+      deal_price: form.product_collection_id && form.deal_price !== '' ? parseFloat(form.deal_price) : null,
+      billing_name: form.is_explicit_product ? form.billing_name.trim() : null,
+      is_explicit_product: form.is_explicit_product === true
     }
     try {
       if (editing) {
@@ -277,8 +331,8 @@ export default function Products() {
         notify('Product updated.')
       } else {
         await createProduct(payload)
-        load(1)
-        notify('Product created.')
+        load(pagination.page)
+        notify('Product created. It may appear on another page based on the current sorting.')
       }
       setModalOpen(false)
       setDuplicateModalOpen(false)
@@ -297,184 +351,75 @@ export default function Products() {
     }
   }
 
-  const handleBulkImport = async (e) => {
-    const file = e.target.files[0]
-    if (!file) return
-    
-    const reader = new FileReader()
-    reader.onload = async (evt) => {
-      try {
-        const data = evt.target.result
-        const workbook = XLSX.read(data, { type: 'binary' })
-        const sheetName = workbook.SheetNames[0]
-        const sheet = workbook.Sheets[sheetName]
-        const rows = XLSX.utils.sheet_to_json(sheet)
-        
-        const mappedProducts = rows.map((row) => {
-          const findVal = (keys) => {
-            const normalizedKeys = keys.map(k => String(k).replace(/[^a-z0-9]/g, '').toLowerCase());
-            const match = Object.keys(row).find(k => {
-              const normK = String(k).replace(/[^a-z0-9]/g, '').toLowerCase();
-              return normalizedKeys.includes(normK);
-            });
-            return match !== undefined ? row[match] : undefined;
-          };
-          
-          const pName = findVal([
-            'product/service name', 'name', 'product name', 'service name', 'title',
-            'product title', 'product_name', 'service_name', 'item', 'item name', 'item_name',
-            'product', 'description', 'desc'
-          ]);
-          const pSku = findVal([
-            'sku', 'sku id', 'sku_id', 'product code', 'product_code', 'code',
-            'item code', 'item_code', 'id', 'sku_number', 'skunumber', 'barcode', 'upc', 'ean'
-          ]);
-          const pPrice = findVal([
-            'sales price / rate', 'price', 'sales price', 'rate', 'selling price',
-            'selling_price', 'sales_price', 'unit price', 'unit_price', 'retail price',
-            'retail_price', 'value'
-          ]);
-          const pCost = findVal([
-            'purchase cost', 'purchase_cost', 'cost', 'purchase_price', 'purchase price',
-            'cost price', 'cost_price', 'unit cost', 'unit_cost', 'buy price', 'buy_price',
-            'purchasecost', 'costprice'
-          ]);
-          const pQty = findVal([
-            'quantity on hand', 'stock_quantity', 'stock', 'qty', 'quantity',
-            'qty on hand', 'qty_on_hand', 'quantity_on_hand', 'inventory', 'in stock',
-            'instock', 'stock qty', 'stock_qty', 'count', 'quantityonhand', 'qtyonhand',
-            'avail', 'available', 'available qty', 'available quantity', 'available_qty',
-            'available_quantity', 'on hand', 'on_hand', 'onhand'
-          ]);
-          
-          const pMainCategory = findVal(['main category', 'main_category', 'category', 'class']);
-          const pSubCategory = findVal(['sub category', 'sub_category', 'subcategory']);
-          
-          const pDesc = findVal(['description', 'desc', 'product description', 'item description', 'details', 'detail']);
-          
-          let mainCat = 'General Merchandise';
-          let subCat = 'Misc';
-          
-          if (pMainCategory) {
-            const cleanedMain = String(pMainCategory).trim().toLowerCase();
-            const matchedKey = Object.keys(CATEGORY_MAP).find(
-              (key) => key.toLowerCase() === cleanedMain
-            );
-            if (matchedKey) {
-              mainCat = matchedKey;
-              subCat = CATEGORY_MAP[matchedKey][0] || 'Misc';
-              
-              if (pSubCategory) {
-                const cleanedSub = String(pSubCategory).trim().toLowerCase();
-                const matchedSub = CATEGORY_MAP[matchedKey].find(
-                  (sub) => sub.toLowerCase() === cleanedSub
-                );
-                if (matchedSub) {
-                  subCat = matchedSub;
-                } else {
-                  subCat = String(pSubCategory).trim();
-                }
-              } else {
-                // Main category matched, but subcategory is missing. Use keyword mapping to refine it.
-                const detected = mapCategoryFromText(pName, pDesc, pMainCategory, pSubCategory);
-                if (detected.mainCat === matchedKey) {
-                  subCat = detected.subCat;
-                }
-              }
-            } else {
-              // Check if the main category column actually matches a subcategory
-              let foundMatch = false;
-              for (const [key, subs] of Object.entries(CATEGORY_MAP)) {
-                const matchedSub = subs.find(sub => sub.toLowerCase() === cleanedMain);
-                if (matchedSub) {
-                  mainCat = key;
-                  subCat = matchedSub;
-                  foundMatch = true;
-                  break;
-                }
-              }
-              if (!foundMatch) {
-                // If it didn't match main or sub, try keyword detection
-                const detected = mapCategoryFromText(pName, pDesc, pMainCategory, pSubCategory);
-                if (detected.mainCat !== 'General Merchandise' || detected.subCat !== 'Misc') {
-                  mainCat = detected.mainCat;
-                  subCat = detected.subCat;
-                } else {
-                  mainCat = String(pMainCategory).trim();
-                  subCat = pSubCategory ? String(pSubCategory).trim() : 'Misc';
-                }
-              }
-            }
-          } else {
-            // No main category specified. Try keyword detection first
-            const detected = mapCategoryFromText(pName, pDesc, pMainCategory, pSubCategory);
-            if (detected.mainCat !== 'General Merchandise' || detected.subCat !== 'Misc') {
-              mainCat = detected.mainCat;
-              subCat = detected.subCat;
-            } else if (categoryFilter !== 'All') {
-              mainCat = categoryFilter;
-              subCat = CATEGORY_MAP[categoryFilter]?.[0] || 'Misc';
-            }
-          }
-          
-          let parsedQty = 0;
-          if (pQty !== undefined && pQty !== null && pQty !== '') {
-            const num = Math.round(Number(pQty));
-            if (!isNaN(num)) {
-              parsedQty = num;
-            }
-          }
+  const handleBulkImport = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setImportFile(file);
+    setImportResult(null);
+    setImportOpen(true);
+    e.target.value = '';
+  };
 
-          let parsedPrice = NaN;
-          if (pPrice !== undefined && pPrice !== null && pPrice !== '') {
-            const num = parseFloat(pPrice);
-            if (!isNaN(num)) {
-              parsedPrice = num;
-            }
-          }
-
-          let parsedCost = null;
-          if (pCost !== undefined && pCost !== null && pCost !== '') {
-            const num = parseFloat(pCost);
-            if (!isNaN(num)) {
-              parsedCost = num;
-            }
-          }
-          
-          return {
-            name: pName ? String(pName).trim() : '',
-            sku_id: pSku ? String(pSku).trim() : null,
-            price: parsedPrice,
-            purchase_cost: parsedCost,
-            stock_quantity: parsedQty,
-            mainCategory: mainCat,
-            subCategory: subCat,
-            requiredLicense: getRequiredLicense(mainCat),
-            description: pDesc ? String(pDesc).trim() : null
-          };
-        }).filter(p => p.name && !isNaN(p.price));
-        
-        if (mappedProducts.length === 0) {
-          notify('No valid products found in the sheet. Ensure headers match "Product/Service Name" and "Sales Price / Rate".', 'error')
-          return
-        }
-        
-        await bulkCreateProducts(mappedProducts)
-        load(1)
-        notify(`${mappedProducts.length} products imported successfully.`)
-      } catch (err) {
-        notify(err.response?.data?.message || 'Failed to parse or import Excel file.', 'error')
-      }
+  const executeProductImport = async () => {
+    if (!importFile) return;
+    setImportUploading(true);
+    setImportResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      fd.append('updateExisting', updateExisting);
+      
+      const res = await importProducts(fd);
+      setImportResult(res.data);
+      load(pagination.page);
+      notify('Products imported successfully. New products may appear on another page based on the current sorting.');
+    } catch (err) {
+      notify(err.response?.data?.message || 'Failed to import products file.', 'error');
+    } finally {
+      setImportUploading(false);
     }
-    reader.readAsBinaryString(file)
-    e.target.value = ''
-  }
+  };
+
+  const downloadErrorReport = () => {
+    if (!importResult || !importResult.failedRows || importResult.failedRows.length === 0) return;
+    
+    const reportData = importResult.failedRows.map(f => {
+      return {
+        'Row Number': f.rowNumber,
+        'Product Name': f.productName,
+        'Error Reason': f.errorReason,
+        ...f.rowData
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(reportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Failed Rows');
+    XLSX.writeFile(workbook, 'product_import_error_report.xlsx');
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await downloadImportTemplate();
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'wdistro_product_import_template.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      notify('Sample import template downloaded.');
+    } catch (err) {
+      notify('Failed to download template from server.', 'error');
+    }
+  };
 
   const doDelete = async (p) => {
     if (!confirm(`Delete "${p.name}"? This cannot be undone.`)) return
     try {
       await deleteProduct(p.id)
       setProducts((prev) => prev.filter((x) => x.id !== p.id))
+      setPagination((prev) => ({ ...prev, total: Math.max(0, (prev.total || 0) - 1) }))
       notify('Product deleted.')
     } catch (err) {
       notify(err.response?.data?.message || 'Delete failed.', 'error')
@@ -489,88 +434,73 @@ export default function Products() {
       : 'text-green-700 bg-green-50'
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <h2 className="text-lg font-semibold text-gray-900">Products</h2>
-        <div className="flex gap-2 flex-wrap">
-          <input
-            type="text"
-            placeholder="Search products…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-48"
-          />
-          <label className="bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors cursor-pointer inline-flex items-center">
-            Import Excel/CSV
-            <input
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              onChange={handleBulkImport}
-              className="hidden"
-            />
-          </label>
-          <button
-            onClick={openCreate}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors"
-          >
-            + Add Product
-          </button>
-        </div>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Products"
+        subtitle={`${pagination.total || 0} total products`}
+        action={
+          <div className="flex gap-2 flex-wrap">
+            <Button
+              onClick={() => {
+                setImportFile(null);
+                setImportResult(null);
+                setImportOpen(true);
+              }}
+              variant="outlined"
+            >
+              Import Products
+            </Button>
+            <Button onClick={openCreate}>+ Add Product</Button>
+          </div>
+        }
+      />
 
-      <div className="flex gap-1 mb-4 overflow-x-auto pb-1">
-        {['All', ...Object.keys(CATEGORY_MAP)].map((cat) => (
-          <button
-            key={cat}
-            onClick={() => {
-              setCategoryFilter(cat)
-              setSubCategoryFilter('All')
-            }}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
-              categoryFilter === cat
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {cat}
-          </button>
-        ))}
-      </div>
+      <TableToolbar>
+        <FilterBar>
+          {['All', ...Object.keys(categoryMap)].map((cat) => (
+            <Button
+              key={cat}
+              variant={categoryFilter === cat ? 'primary' : 'secondary'}
+              onClick={() => { setCategoryFilter(cat); setSubCategoryFilter('All') }}
+              className="py-1 px-3 whitespace-nowrap"
+            >
+              {cat}
+            </Button>
+          ))}
+        </FilterBar>
+        <SearchBar
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search products..."
+        />
+      </TableToolbar>
 
-      {/* Clearance filter row */}
-      <div className="flex gap-1.5 mb-4">
-        {['All', 'Clearance', 'Regular'].map((opt) => (
-          <button
-            key={opt}
-            onClick={() => setClearanceFilter(opt)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium whitespace-nowrap transition-colors ${
-              clearanceFilter === opt
-                ? opt === 'Clearance'
-                  ? 'bg-orange-500 text-white'
-                  : 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
+      {/* Product Collection Filter Row */}
+      <FilterBar className="mb-4">
+        {[{ id: 'All', name: 'All Collections' }, { id: 'none', name: 'No Collection' }, ...collections].map((coll) => (
+          <Button
+            key={coll.id}
+            variant={collectionFilter === coll.id ? 'primary' : 'secondary'}
+            onClick={() => setCollectionFilter(coll.id)}
+            className="py-1 px-3 whitespace-nowrap text-xs"
           >
-            {opt === 'Clearance' ? '🏷 Clearance' : opt}
-          </button>
+            {coll.name}
+          </Button>
         ))}
-      </div>
-      {categoryFilter !== 'All' && CATEGORY_MAP[categoryFilter] && (
-        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1.5 border-b border-gray-100">
-          {['All', ...CATEGORY_MAP[categoryFilter]].map((sub) => (
-            <button
+      </FilterBar>
+      {categoryFilter !== 'All' && categoryMap[categoryFilter] && (
+        <FilterBar className="mb-4 border-b border-gray-100 pb-2">
+          {['All', ...categoryMap[categoryFilter]].map((sub) => (
+            <Button
               key={sub}
+              variant={subCategoryFilter === sub ? 'outlined' : 'secondary'}
               onClick={() => setSubCategoryFilter(sub)}
-              className={`px-3 py-1 rounded-full text-xs font-medium whitespace-nowrap transition-colors ${
-                subCategoryFilter === sub
-                  ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                  : 'bg-white border border-gray-200 text-gray-500 hover:bg-gray-50'
-              }`}
+              className="py-0.5 px-3 whitespace-nowrap text-xs rounded-full"
             >
               {sub}
-            </button>
+            </Button>
           ))}
-        </div>
+        </FilterBar>
       )}
 
 
@@ -586,28 +516,29 @@ export default function Products() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        {loading ? (
-          <p className="text-center text-gray-400 text-sm py-10">Loading…</p>
-        ) : (
-          <>
-            <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[640px]">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">S.No</th>
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Image</th>
-                  <SortHeader label="SKU ID" sortKey="sku_id" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                  <SortHeader label="Name" sortKey="name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Category</th>
-                  {isAdmin && <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Purchase Cost</th>}
-                  <SortHeader label="Price" sortKey="price" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                  <SortHeader label="Stock" sortKey="stock_quantity" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
-                  <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {visible.map((p, index) => {
+      <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm min-w-[800px] md:min-w-full">
+            <thead className="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">S.No</th>
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Image</th>
+                <SortHeader label="SKU ID" sortKey="sku_id" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                <SortHeader label="Name" sortKey="name" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Category</th>
+                {isAdmin && <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Purchase Cost</th>}
+                <SortHeader label="Price" sortKey="price" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                <SortHeader label="Stock" sortKey="stock_quantity" currentSort={sortBy} currentOrder={sortOrder} onSort={handleSort} />
+                <th className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr><td colSpan="9" className="text-center py-10 text-gray-400 text-sm">Loading…</td></tr>
+              ) : visible.length === 0 ? (
+                <tr><td colSpan="9" className="text-center py-10 text-gray-400 text-sm">No products found</td></tr>
+              ) : (
+                visible.map((p, index) => {
                   const sNo = (pagination.page - 1) * LIMIT + index + 1;
                   return (
                     <tr key={p.id} className="hover:bg-gray-50">
@@ -640,10 +571,17 @@ export default function Products() {
                       </td>
                       {isAdmin && <td className="px-4 py-2.5 text-gray-500 font-medium">{p.purchase_cost ? fmt(p.purchase_cost) : '—'}</td>}
                       <td className="px-4 py-2.5 font-medium">
-                        {p.is_clearance && p.clearance_price != null ? (
+                        {p.deal_price != null ? (
                           <div className="flex flex-col">
                             <span className="line-through text-gray-400 text-xs">{fmt(p.price)}</span>
-                            <span className="text-orange-600 font-semibold">{fmt(p.clearance_price)}</span>
+                            <span className="text-orange-600 font-semibold">
+                              {fmt(p.deal_price)}
+                              {p.ProductCollection && (
+                                <span className="ml-1 bg-orange-50 text-orange-600 border border-orange-100 text-[10px] font-semibold px-1 rounded uppercase">
+                                  {p.ProductCollection.name}
+                                </span>
+                              )}
+                            </span>
                           </div>
                         ) : (
                           fmt(p.price)
@@ -656,53 +594,25 @@ export default function Products() {
                       </td>
                       <td className="px-4 py-2.5">
                         <div className="flex gap-2">
-                          <button
-                            onClick={() => openEdit(p)}
-                            className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 transition-colors"
-                          >
-                            Edit
-                          </button>
-                          <button
-                            onClick={() => doDelete(p)}
-                            className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-red-50 hover:text-red-700 text-gray-700 transition-colors"
-                          >
-                            Delete
-                          </button>
+                          <Button variant="secondary" onClick={() => openEdit(p)} className="py-0.5 px-2 text-xs">Edit</Button>
+                          <Button variant="danger" onClick={() => doDelete(p)} className="py-0.5 px-2 text-xs">Delete</Button>
                         </div>
                       </td>
                     </tr>
                   )
-                })}
-              </tbody>
-            </table>
-            </div>
-            {visible.length === 0 && (
-              <p className="text-center text-gray-400 text-sm py-10">No products found</p>
-            )}
-          </>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Pagination */}
       {pagination.totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 mt-4 text-sm">
-          <button
-            onClick={() => load(pagination.page - 1)}
-            disabled={pagination.page === 1}
-            className="px-3 py-1.5 rounded-md bg-white border border-gray-300 text-gray-700 disabled:opacity-40 hover:bg-gray-50"
-          >
-            Previous
-          </button>
-          <span className="text-gray-500">
-            Page {pagination.page} of {pagination.totalPages}
-          </span>
-          <button
-            onClick={() => load(pagination.page + 1)}
-            disabled={pagination.page === pagination.totalPages}
-            className="px-3 py-1.5 rounded-md bg-white border border-gray-300 text-gray-700 disabled:opacity-40 hover:bg-gray-50"
-          >
-            Next
-          </button>
+          <Button variant="secondary" onClick={() => load(pagination.page - 1)} disabled={pagination.page === 1} className="py-1 px-3">Previous</Button>
+          <span className="text-gray-500">Page {pagination.page} of {pagination.totalPages}</span>
+          <Button variant="secondary" onClick={() => load(pagination.page + 1)} disabled={pagination.page === pagination.totalPages} className="py-1 px-3">Next</Button>
         </div>
       )}
 
@@ -748,7 +658,7 @@ export default function Products() {
                 className={input}
               >
                 <option value="" disabled>Select category…</option>
-                {Object.keys(CATEGORY_MAP).map((cat) => (
+                {Object.keys(categoryMap).map((cat) => (
                   <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
@@ -762,7 +672,7 @@ export default function Products() {
                 disabled={!form.mainCategory}
               >
                 <option value="" disabled>{form.mainCategory ? 'Select sub category…' : 'Select a category first'}</option>
-                {(CATEGORY_MAP[form.mainCategory] || []).map((sub) => (
+                {(categoryMap[form.mainCategory] || []).map((sub) => (
                   <option key={sub} value={sub}>{sub}</option>
                 ))}
               </select>
@@ -833,32 +743,62 @@ export default function Products() {
               </label>
             </div>
 
-            {/* Clearance toggle */}
             <div className="sm:col-span-2 flex items-center gap-2 py-1">
               <input
                 type="checkbox"
-                id="is_clearance"
-                checked={form.is_clearance}
-                onChange={(e) => setForm({ ...form, is_clearance: e.target.checked, clearance_price: e.target.checked ? form.clearance_price : '' })}
-                className="rounded border-gray-300 text-orange-500 focus:ring-orange-400 h-4 w-4"
+                id="is_explicit_product"
+                checked={form.is_explicit_product}
+                onChange={(e) => setForm({ ...form, is_explicit_product: e.target.checked, billing_name: e.target.checked ? form.billing_name : '' })}
+                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
               />
-              <label htmlFor="is_clearance" className="text-sm font-medium text-gray-700">
-                🏷 Clearance Product
+              <label htmlFor="is_explicit_product" className="text-sm font-medium text-gray-700">
+                Explicit Product (Restricted to approved shops only)
               </label>
             </div>
 
-            {/* Clearance Price — only visible when is_clearance is checked */}
-            {form.is_clearance && (
-              <Field label="Clearance Price ($)" required>
+            {form.is_explicit_product && (
+              <div className="sm:col-span-2">
+                <Field label="Billing Name" required>
+                  <input
+                    type="text"
+                    value={form.billing_name}
+                    onChange={(e) => setForm({ ...form, billing_name: e.target.value })}
+                    required
+                    className={input}
+                    placeholder="Enter billing name for customer invoices"
+                  />
+                </Field>
+              </div>
+            )}
+
+            {/* Product Collection Dropdown */}
+            <div className="sm:col-span-2">
+              <Field label="Product Collection">
+                <select
+                  value={form.product_collection_id}
+                  onChange={(e) => setForm({ ...form, product_collection_id: e.target.value, deal_price: e.target.value ? form.deal_price : '' })}
+                  className={input}
+                >
+                  <option value="">None (Regular Product)</option>
+                  {collections.map((coll) => (
+                    <option key={coll.id} value={coll.id}>{coll.name}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+
+            {/* Deal Price — only visible when a collection is selected */}
+            {form.product_collection_id && (
+              <Field label="Deal Price ($)" required>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
-                  value={form.clearance_price}
-                  onChange={(e) => setForm({ ...form, clearance_price: e.target.value })}
+                  value={form.deal_price}
+                  onChange={(e) => setForm({ ...form, deal_price: e.target.value })}
                   required
                   className={input}
-                  placeholder="Enter clearance / sale price"
+                  placeholder="Enter custom promotional / deal price"
                 />
               </Field>
             )}
@@ -1009,7 +949,190 @@ export default function Products() {
           </div>
         </div>
       </Modal>
-    </div>
+
+      {/* Import Products Wizard Modal */}
+      <Modal open={importOpen} onClose={() => { if (!importUploading) setImportOpen(false) }} title="Import Products" size="lg">
+        <div className="space-y-4">
+          {!importResult ? (
+            <div className="space-y-4">
+              <div className="bg-indigo-50 border border-indigo-100 rounded-lg p-4 text-sm text-indigo-800">
+                <div className="flex justify-between items-start gap-4 mb-2 flex-wrap sm:flex-nowrap">
+                  <div>
+                    <p className="font-semibold mb-0.5">Standardized Template Headers & Guidelines:</p>
+                    <p className="text-xs text-indigo-600">Ensure your spreadsheet contains columns mapping to the fields below.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    className="shrink-0 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold px-3 py-1.5 rounded transition-colors inline-flex items-center gap-1.5 shadow-sm"
+                  >
+                    📥 Download Sample Template
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono mt-2">
+                  <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> Product Name</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> SKU</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Barcode</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> Category</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> Subcategory</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Description</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Purchase Cost</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> Selling Price</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Deal Price</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Product Collection</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> Stock Quantity</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Image URL</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Featured Product (Yes/No)</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Explicit Product (Yes/No)</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Billing Name</div>
+                  <div className="p-1.5 bg-white rounded border border-indigo-100">Active (Yes/No)</div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2.5 py-1">
+                <input
+                  type="checkbox"
+                  id="updateExisting"
+                  checked={updateExisting}
+                  onChange={(e) => setUpdateExisting(e.target.checked)}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+                />
+                <label htmlFor="updateExisting" className="text-sm font-medium text-gray-700">
+                  Update Existing Products (Overwrite matched SKU details/stock)
+                </label>
+              </div>
+
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center bg-gray-50 flex flex-col items-center justify-center">
+                {importFile ? (
+                  <>
+                    <p className="text-sm text-gray-700 font-medium mb-1">
+                      📄 Selected: <span className="underline">{importFile.name}</span> ({Math.round(importFile.size / 1024)} KB)
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setImportFile(null)}
+                      className="mt-2 text-xs text-red-600 hover:text-red-800 underline font-medium"
+                    >
+                      Remove File
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-500 mb-3">Drag & drop your Excel or CSV file here, or click to upload</p>
+                    <label className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-4 py-2 rounded transition-colors cursor-pointer inline-flex items-center gap-1.5 shadow-sm">
+                      📂 Select Excel / CSV File
+                      <input
+                        type="file"
+                        accept=".xlsx,.xls,.csv"
+                        onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) setImportFile(file);
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </>
+                )}
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={executeProductImport}
+                  disabled={importUploading || !importFile}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-65 disabled:cursor-not-allowed text-white text-sm font-medium py-2 rounded-md transition-colors"
+                >
+                  {importUploading ? 'Processing Import...' : 'Start Import'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportOpen(false)}
+                  disabled={importUploading}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium py-2 rounded-md transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-800">Import Summary Results:</h3>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="p-3 bg-gray-50 rounded-lg border border-gray-200 text-center">
+                  <div className="text-2xl font-bold text-gray-800">{importResult.summary.totalRows}</div>
+                  <div className="text-2xs text-gray-400 uppercase tracking-wider mt-0.5">Total Rows</div>
+                </div>
+                <div className="p-3 bg-green-50 rounded-lg border border-green-150 text-center">
+                  <div className="text-2xl font-bold text-green-700">{importResult.summary.productsCreated}</div>
+                  <div className="text-2xs text-green-500 uppercase tracking-wider mt-0.5">Created</div>
+                </div>
+                <div className="p-3 bg-blue-50 rounded-lg border border-blue-150 text-center">
+                  <div className="text-2xl font-bold text-blue-700">{importResult.summary.productsUpdated}</div>
+                  <div className="text-2xs text-blue-500 uppercase tracking-wider mt-0.5">Updated</div>
+                </div>
+                <div className="p-3 bg-red-50 rounded-lg border border-red-150 text-center">
+                  <div className="text-2xl font-bold text-red-700">{importResult.summary.failedRowsCount}</div>
+                  <div className="text-2xs text-red-500 uppercase tracking-wider mt-0.5">Failed Rows</div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div>
+                  <span className="font-semibold text-gray-600">Categories:</span> Created: {importResult.summary.categoriesCreated} | Normalized: {importResult.summary.categoriesNormalized}
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-600">Subcategories:</span> Created: {importResult.summary.subcategoriesCreated} | Normalized: {importResult.summary.subcategoriesNormalized}
+                </div>
+                <div>
+                  <span className="font-semibold text-gray-600">Collections:</span> Created: {importResult.summary.collectionsCreated} | Normalized: {importResult.summary.collectionsNormalized}
+                </div>
+              </div>
+
+              {importResult.failedRows && importResult.failedRows.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <h4 className="text-xs font-semibold text-red-700">Failed Items Details ({importResult.failedRows.length}):</h4>
+                    <button
+                      type="button"
+                      onClick={downloadErrorReport}
+                      className="text-xs text-indigo-600 hover:text-indigo-800 font-medium underline flex items-center gap-1"
+                    >
+                      📥 Download Error Report
+                    </button>
+                  </div>
+                  <div className="max-h-48 overflow-y-auto border border-red-100 rounded-md">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="bg-red-50 text-red-800 border-b border-red-100">
+                          <th className="p-2 w-16">Row</th>
+                          <th className="p-2 w-1/3">Product Name</th>
+                          <th className="p-2">Error Reason</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {importResult.failedRows.map((f, idx) => (
+                          <tr key={idx} className="border-b border-red-50 hover:bg-red-50/30">
+                            <td className="p-2 font-mono text-gray-500">{f.rowNumber}</td>
+                            <td className="p-2 font-medium text-gray-700">{f.productName}</td>
+                            <td className="p-2 text-red-600">{f.errorReason}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-2">
+                <Button onClick={() => setImportOpen(false)} className="w-full">
+                  Close & Refresh List
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
+    </PageLayout>
   )
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getIncentives } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
+import { PageLayout, PageHeader } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -27,13 +28,11 @@ export default function SalesPerformance() {
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-900">My Sales Performance</h2>
-        <p className="text-sm text-gray-500 mt-0.5">
-          Overview of your sales volume and orders driven across all assigned stores
-        </p>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="My Sales Performance"
+        subtitle="Overview of your sales volume and orders driven across all assigned stores."
+      />
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
@@ -61,7 +60,7 @@ export default function SalesPerformance() {
         <table className="w-full text-sm min-w-[480px]">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
-              {['Order ID', 'Store Name', 'Order Date', 'Status', 'Order Amount'].map((h) => (
+              {['S.No', 'Order ID', 'Store Name', 'Order Date', 'Status', 'Order Amount'].map((h) => (
                 <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
                   {h}
                 </th>
@@ -69,8 +68,9 @@ export default function SalesPerformance() {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {performance.map((record) => (
+            {performance.map((record, index) => (
               <tr key={record.order?.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3.5 text-gray-500 font-medium">{index + 1}</td>
                 <td className="px-4 py-3.5 font-medium text-gray-900">WS-{record.order?.id}</td>
                 <td className="px-4 py-3.5 text-gray-700">{record.shop?.shop_name || `Store #${record.shop?.id}`}</td>
                 <td className="px-4 py-3.5 text-gray-500">{fmtDate(record.order?.created_at)}</td>
@@ -89,6 +89,6 @@ export default function SalesPerformance() {
         </table>
         </div>
       </div>
-    </div>
+    </PageLayout>
   )
 }

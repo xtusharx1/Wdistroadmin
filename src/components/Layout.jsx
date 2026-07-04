@@ -11,6 +11,8 @@ const NAV = {
     { label: 'Products', path: '/admin/products' },
     { label: 'Featured Products', path: '/admin/featured-products' },
     { label: 'Variation Groups', path: '/admin/variation-groups' },
+    { label: 'Category Management', path: '/admin/categories' },
+    { label: 'Product Collections', path: '/admin/collections' },
     { label: 'Inventory', path: '/admin/inventory' },
     { label: 'Inventory Receiving', path: '/admin/inventory-receiving' },
     { label: 'Orders', path: '/admin/orders' },

@@ -17,6 +17,8 @@ const FeaturedProducts = lazy(() => import('./pages/seller/FeaturedProducts'))
 const VariationGroups = lazy(() => import('./pages/seller/VariationGroups'))
 const Inventory = lazy(() => import('./pages/seller/Inventory'))
 const InventoryReceiving = lazy(() => import('./pages/admin/InventoryReceiving'))
+const CategoryManagement = lazy(() => import('./pages/admin/CategoryManagement'))
+const CollectionManagement = lazy(() => import('./pages/admin/CollectionManagement'))
 const SellerOrders = lazy(() => import('./pages/seller/Orders'))
 const SellerInvoices = lazy(() => import('./pages/seller/Invoices'))
 const AssignedStores = lazy(() => import('./pages/sales/AssignedStores'))
@@ -53,6 +55,8 @@ export default function App() {
               <Route path="/admin/products" element={<Products />} />
               <Route path="/admin/featured-products" element={<FeaturedProducts />} />
               <Route path="/admin/variation-groups" element={<VariationGroups />} />
+              <Route path="/admin/categories" element={<CategoryManagement />} />
+              <Route path="/admin/collections" element={<CollectionManagement />} />
               <Route path="/admin/inventory" element={<Inventory />} />
               <Route path="/admin/inventory-receiving" element={<InventoryReceiving />} />
               <Route path="/admin/orders" element={<AdminOrders />} />

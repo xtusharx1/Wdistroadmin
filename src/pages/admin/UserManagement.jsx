@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getUser } from '../../auth'
 import { getUsers, createUser, activateUser, deactivateUser, resetPassword, updateUser } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Field } from '../../components/DesignSystem'
 
 const ROLES = ['Admin', 'Sales Executive']
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
@@ -15,6 +15,7 @@ export default function UserManagement() {
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState(null)
   const [roleFilter, setRoleFilter] = useState('All')
+  const [search, setSearch] = useState('')
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
@@ -36,8 +37,17 @@ export default function UserManagement() {
       .finally(() => setLoading(false))
   }, [])
 
-  const visible =
+  const visible = (
     roleFilter === 'All' ? users : users.filter((u) => u.role === roleFilter)
+  ).filter((u) => {
+    const q = search.toLowerCase().trim()
+    if (!q) return true
+    return (
+      (u.name || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.phone || '').toLowerCase().includes(q)
+    )
+  })
 
   const handleOpenCreate = () => {
     setEditUser(null)
@@ -131,58 +141,39 @@ export default function UserManagement() {
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <h2 className="text-lg font-semibold text-gray-900">User Management</h2>
-        <button
-          onClick={handleOpenCreate}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-4 py-2 rounded-md transition-colors self-start sm:self-auto"
-        >
-          + Create User
-        </button>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="User Management"
+        subtitle={`${users.length} total users`}
+        action={
+          <Button onClick={handleOpenCreate}>+ Create User</Button>
+        }
+      />
 
-      {msg && (
-        <div
-          className={`mb-4 rounded-md px-4 py-2.5 text-sm ${
-            msg.type === 'error'
-              ? 'bg-red-50 text-red-700 border border-red-200'
-              : 'bg-green-50 text-green-700 border border-green-200'
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
+      <TableToolbar>
+        <FilterBar>
+          {['All', ...ROLES].map((r) => (
+            <Button
+              key={r}
+              variant={roleFilter === r ? 'primary' : 'secondary'}
+              onClick={() => setRoleFilter(r)}
+              className="py-1 px-3"
+            >
+              {r}
+            </Button>
+          ))}
+        </FilterBar>
+        <SearchBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name, email, or phone..."
+        />
+      </TableToolbar>
 
-      <div className="flex gap-1 mb-4 flex-wrap">
-        {['All', ...ROLES].map((r) => (
-          <button
-            key={r}
-            onClick={() => setRoleFilter(r)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              roleFilter === r
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {r}
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[640px]">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                {['S.No', 'Name', 'Email', 'Phone', 'Role', 'Status', 'Created', 'Actions'].map((h) => (
-                  <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
+      <DataTable
+        headers={['S.No', 'Name', 'Email', 'Phone', 'Role', 'Status', 'Created', 'Actions']}
+        empty={visible.length === 0}
+      >
               {visible.map((u, index) => (
                 <tr key={u.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
@@ -201,40 +192,21 @@ export default function UserManagement() {
                   <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(u.created_at)}</td>
                   <td className="px-4 py-3">
                     <div className="flex gap-1.5 flex-wrap">
-                      <button
-                        onClick={() => handleOpenEdit(u)}
-                        className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors whitespace-nowrap"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => doToggle(u)}
+                      <Button variant="warning" onClick={() => handleOpenEdit(u)} className="py-0.5 px-2 text-2xs">Edit</Button>
+                      <Button
+                        variant={u.is_active ? 'secondary' : 'success'}
                         disabled={u.id === me.id}
-                        className={`text-xs px-2.5 py-1 rounded transition-colors disabled:opacity-40 whitespace-nowrap ${
-                          u.is_active
-                            ? 'bg-gray-100 hover:bg-red-50 text-gray-700 hover:text-red-700'
-                            : 'bg-green-50 hover:bg-green-100 text-green-700'
-                        }`}
+                        onClick={() => doToggle(u)}
+                        className="py-0.5 px-2 text-2xs"
                       >
                         {u.is_active ? 'Deactivate' : 'Activate'}
-                      </button>
-                      <button
-                        onClick={() => { setResetFor(u); setNewPw('') }}
-                        className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors whitespace-nowrap"
-                      >
-                        Reset PW
-                      </button>
+                      </Button>
+                      <Button variant="secondary" onClick={() => { setResetFor(u); setNewPw('') }} className="py-0.5 px-2 text-2xs">Reset PW</Button>
                     </div>
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-        {visible.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-10">No users found</p>
-        )}
-      </div>
+      </DataTable>
 
       {/* Create / Edit User Modal */}
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={editUser ? 'Edit User' : 'Create User'}>
@@ -334,19 +306,8 @@ export default function UserManagement() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageLayout>
   )
 }
 
 const input = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
-
-function Field({ label, required, children }) {
-  return (
-    <div>
-      <label className="block text-sm font-medium text-gray-700 mb-1">
-        {label} {required && <span className="text-red-500">*</span>}
-      </label>
-      {children}
-    </div>
-  )
-}

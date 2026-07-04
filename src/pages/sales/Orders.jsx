@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getUser } from '../../auth'
 import { getSalesAssignments, getOrders, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -17,6 +17,7 @@ export default function SalesOrders() {
   const [assignedStoreIds, setAssignedStoreIds] = useState(new Set())
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
+  const [search, setSearch] = useState('')
   
   // Modals state
   const [detail, setDetail] = useState(null)
@@ -215,89 +216,76 @@ export default function SalesOrders() {
     }
   }
 
-  const visible =
+  const visible = (
     filter === 'All' ? orders : orders.filter((o) => o.status === filter)
+  ).filter((o) => {
+    const q = search.toLowerCase().trim()
+    if (!q) return true
+    const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
+    return String(o.id).includes(q) || storeName.includes(q)
+  })
 
   if (loading && orders.length === 0) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   if (assignedStoreIds.size === 0) {
     return (
-      <div className="p-4 sm:p-6">
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">Orders</h2>
+      <PageLayout>
+        <PageHeader title="Orders" />
         <div className="bg-white rounded-lg border border-gray-200 py-16 text-center">
           <p className="text-gray-400 text-sm">No stores assigned to you yet.</p>
         </div>
-      </div>
+      </PageLayout>
     )
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Orders</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            From your {assignedStoreIds.size} assigned store{assignedStoreIds.size !== 1 ? 's' : ''}
-          </p>
-        </div>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Orders"
+        subtitle={`From your ${assignedStoreIds.size} assigned store${assignedStoreIds.size !== 1 ? 's' : ''}`}
+      />
 
-      <div className="flex gap-1 mb-4 flex-wrap">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
-              filter === f
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {f}
-          </button>
+      <TableToolbar>
+        <FilterBar>
+          {FILTERS.map((f) => (
+            <Button
+              key={f}
+              variant={filter === f ? 'primary' : 'secondary'}
+              onClick={() => setFilter(f)}
+              className="py-1 px-3 capitalize"
+            >
+              {f}
+            </Button>
+          ))}
+        </FilterBar>
+        <SearchBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by order ID or store name..."
+        />
+      </TableToolbar>
+
+      <DataTable
+        headers={['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Detail']}
+        empty={visible.length === 0}
+      >
+        {visible.map((o, index) => (
+          <tr key={o.id} className="hover:bg-gray-50">
+            <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
+            <td className="px-4 py-3 font-medium text-gray-900">WS-{o.id}</td>
+            <td className="px-4 py-3 text-gray-700">
+              {storeMap[o.shop_id] || `Store #${o.shop_id}`}
+            </td>
+            <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
+            <td className="px-4 py-3 font-medium">{fmt(o.total_amount)}</td>
+            <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
+            <td className="px-4 py-3 text-gray-500">{fmtDate(o.created_at)}</td>
+            <td className="px-4 py-3">
+              <Button variant="secondary" onClick={() => setDetail(o)} className="py-0.5 px-2 text-2xs">View &amp; Manage</Button>
+            </td>
+          </tr>
         ))}
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[560px]">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {['Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Detail'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {visible.map((o) => (
-              <tr key={o.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium text-gray-900">WS-{o.id}</td>
-                <td className="px-4 py-3 text-gray-700">
-                  {storeMap[o.shop_id] || `Store #${o.shop_id}`}
-                </td>
-                <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
-                <td className="px-4 py-3 font-medium">{fmt(o.total_amount)}</td>
-                <td className="px-4 py-3"><StatusBadge status={o.status} /></td>
-                <td className="px-4 py-3 text-gray-500">{fmtDate(o.created_at)}</td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => setDetail(o)}
-                    className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-indigo-50 hover:text-indigo-700 text-gray-700 transition-colors"
-                  >
-                    View & Manage
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-        {visible.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-10">No orders found</p>
-        )}
-      </div>
+      </DataTable>
 
       {/* Order Detail Modal */}
       <Modal open={!!detail} onClose={() => setDetail(null)} title={`Order WS-${detail?.id}`} size="lg">
@@ -701,6 +689,6 @@ export default function SalesOrders() {
           </div>
         )}
       </Modal>
-    </div>
+    </PageLayout>
   )
 }

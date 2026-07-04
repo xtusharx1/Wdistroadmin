@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
 import { getUser } from '../../auth'
-import { getSalesAssignments, getOrders, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder } from '../../api'
+import { getSalesAssignments, getOrders, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, getCustomerPayments } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, Dialog as Modal, DataTable } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -14,10 +14,11 @@ export default function AssignedStores() {
   const [orders, setOrders] = useState([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('Active')
+  const [search, setSearch] = useState('')
 
   // Modals state
   const [selectedStore, setSelectedStore] = useState(null)
-  const [activeTab, setActiveTab] = useState('details') // 'details' | 'orders' | 'invoices'
+  const [activeTab, setActiveTab] = useState('details') // 'details' | 'orders' | 'invoices' | 'payments'
   
   const [orderDetail, setOrderDetail] = useState(null)
   const [invoice, setInvoice] = useState(null)
@@ -26,6 +27,11 @@ export default function AssignedStores() {
   
   const [processModal, setProcessModal] = useState(null)
   const [updatingStatus, setUpdatingStatus] = useState(null)
+
+  // Payments Tab State
+  const [payments, setPayments] = useState([])
+  const [loadingPayments, setLoadingPayments] = useState(false)
+  const [selectedPaymentInvoice, setSelectedPaymentInvoice] = useState(null)
 
   const fetchData = () => {
     setLoading(true)
@@ -54,6 +60,17 @@ export default function AssignedStores() {
       setInvoice(null)
     }
   }, [orderDetail])
+
+  // Fetch customer payments when payments tab is selected
+  useEffect(() => {
+    if (selectedStore && activeTab === 'payments') {
+      setLoadingPayments(true)
+      getCustomerPayments(selectedStore.id)
+        .then((res) => setPayments(res.data.data.invoices || []))
+        .catch(() => setPayments([]))
+        .finally(() => setLoadingPayments(false))
+    }
+  }, [selectedStore, activeTab])
 
   const handleInvoiceGeneration = async () => {
     setGeneratingInvoice(true)
@@ -141,42 +158,49 @@ export default function AssignedStores() {
     }
   }
 
-  const visible =
+  const visible = (
     filter === 'Active'
       ? assignments.filter((a) => !a.end_date)
       : filter === 'Historical'
       ? assignments.filter((a) => !!a.end_date)
       : assignments
+  ).filter((a) => {
+    const q = search.toLowerCase().trim()
+    if (!q) return true
+    const storeName = a.Shop?.shop_name?.toLowerCase() || ''
+    const ownerName = a.Shop?.owner_name?.toLowerCase() || ''
+    const email = a.Shop?.email?.toLowerCase() || ''
+    return storeName.includes(q) || ownerName.includes(q) || email.includes(q)
+  })
 
   if (loading && assignments.length === 0) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Assigned Stores</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            {assignments.filter((a) => !a.end_date).length} active assignment
-            {assignments.filter((a) => !a.end_date).length !== 1 ? 's' : ''}
-          </p>
-        </div>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Assigned Stores"
+        subtitle={`${assignments.filter((a) => !a.end_date).length} active assignment${assignments.filter((a) => !a.end_date).length !== 1 ? 's' : ''}`}
+      />
 
-      <div className="flex gap-1 mb-4">
-        {['Active', 'Historical', 'All'].map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-              filter === f
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
+      <TableToolbar>
+        <FilterBar>
+          {['Active', 'Historical', 'All'].map((f) => (
+            <Button
+              key={f}
+              variant={filter === f ? 'primary' : 'secondary'}
+              onClick={() => setFilter(f)}
+              className="py-1 px-3"
+            >
+              {f}
+            </Button>
+          ))}
+        </FilterBar>
+        <SearchBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by store name, owner, or email..."
+        />
+      </TableToolbar>
 
       {visible.length === 0 ? (
         <div className="bg-white rounded-lg border border-gray-200 py-16 text-center">
@@ -257,7 +281,7 @@ export default function AssignedStores() {
           <div>
             {/* Tabs */}
             <div className="flex border-b border-gray-200 mb-5">
-              {['details', 'orders', 'invoices'].map((tab) => (
+              {['details', 'orders', 'invoices', 'payments'].map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -403,6 +427,186 @@ export default function AssignedStores() {
                 </table>
               </div>
             )}
+
+            {activeTab === 'payments' && (
+              <div className="space-y-5 text-sm">
+                {loadingPayments ? (
+                  <p className="text-sm text-gray-400 text-center py-10">Loading payments…</p>
+                ) : (
+                  <>
+                    {/* Payment Summary Cards */}
+                    {(() => {
+                      const totalInvoiced = payments.reduce((sum, inv) => sum + (Number(inv.total_invoice_amount) || 0), 0)
+                      const totalPaid = payments.reduce((sum, inv) => sum + (Number(inv.total_amount_paid) || 0), 0)
+                      const totalOutstanding = payments.reduce((sum, inv) => sum + (Number(inv.remaining_balance) || 0), 0)
+                      const pendingInvoices = payments.filter((inv) => inv.remaining_balance > 0.01).length
+
+                      return (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+                          <div className="p-3 bg-gray-50 border border-gray-150 rounded-lg text-center shadow-3xs">
+                            <p className="text-4xs font-bold text-gray-400 uppercase tracking-wide">Total Invoice Value</p>
+                            <p className="text-sm font-bold text-gray-900 mt-1">{fmt(totalInvoiced)}</p>
+                          </div>
+                          <div className="p-3 bg-green-50/50 border border-green-100 rounded-lg text-center shadow-3xs">
+                            <p className="text-4xs font-bold text-green-700 uppercase tracking-wide">Total Amount Paid</p>
+                            <p className="text-sm font-bold text-green-700 mt-1">{fmt(totalPaid)}</p>
+                          </div>
+                          <div className="p-3 bg-orange-50/50 border border-orange-100 rounded-lg text-center shadow-3xs">
+                            <p className="text-4xs font-bold text-orange-700 uppercase tracking-wide">Total Outstanding Balance</p>
+                            <p className="text-sm font-bold text-orange-700 mt-1">{fmt(totalOutstanding)}</p>
+                          </div>
+                          <div className="p-3 bg-indigo-50/50 border border-indigo-100 rounded-lg text-center shadow-3xs">
+                            <p className="text-4xs font-bold text-indigo-700 uppercase tracking-wide">Total Pending Invoices</p>
+                            <p className="text-sm font-bold text-indigo-700 mt-1">{pendingInvoices}</p>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
+                    {/* Payments Table */}
+                    <DataTable
+                      headers={[
+                        'Invoice Number',
+                        'Order Number',
+                        'Invoice Date',
+                        { label: 'Total Invoice Amount', align: 'right' },
+                        { label: 'Total Amount Paid', align: 'right' },
+                        { label: 'Remaining Balance', align: 'right' },
+                        'Payment Status',
+                        { label: 'View Details', align: 'center' }
+                      ]}
+                      empty={payments.length === 0}
+                    >
+                      {payments.map((inv) => {
+                        let statusCls = 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                        if (inv.payment_status === 'Paid') {
+                          statusCls = 'bg-green-50 text-green-700 border-green-200'
+                        } else if (inv.payment_status === 'Partially Paid') {
+                          statusCls = 'bg-orange-50 text-orange-700 border-orange-200'
+                        }
+
+                        return (
+                          <tr key={inv.invoice_id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-2.5 font-semibold text-gray-900">{inv.invoice_number}</td>
+                            <td className="px-4 py-2.5 text-indigo-600 font-medium">{inv.order_number}</td>
+                            <td className="px-4 py-2.5 text-gray-500 whitespace-nowrap">{fmtDate(inv.invoice_date)}</td>
+                            <td className="px-4 py-2.5 text-right font-medium text-gray-700">{fmt(inv.total_invoice_amount)}</td>
+                            <td className="px-4 py-2.5 text-right font-medium text-green-600">{fmt(inv.total_amount_paid)}</td>
+                            <td className="px-4 py-2.5 text-right font-semibold text-orange-600">{fmt(inv.remaining_balance)}</td>
+                            <td className="px-4 py-2.5">
+                              <span className={`px-2 py-0.5 rounded-full border text-4xs font-bold uppercase tracking-wider ${statusCls}`}>
+                                {inv.payment_status}
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-center">
+                              <Button
+                                variant="secondary"
+                                onClick={() => setSelectedPaymentInvoice(inv)}
+                                className="py-0.5 px-2.5 text-xs font-semibold"
+                              >
+                                View Details
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </DataTable>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Payment Details Modal */}
+      <Modal
+        open={!!selectedPaymentInvoice}
+        onClose={() => setSelectedPaymentInvoice(null)}
+        title={`Payment Details — ${selectedPaymentInvoice?.invoice_number}`}
+        size="lg"
+      >
+        {selectedPaymentInvoice && (
+          <div className="space-y-5 text-xs">
+            {/* Invoice Summary */}
+            <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-3xs">
+              <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide mb-3">Invoice Summary</h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <p className="text-gray-400 font-medium">Invoice Number</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{selectedPaymentInvoice.invoice_number}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium">Order Number</p>
+                  <p className="font-semibold text-indigo-600 mt-0.5">{selectedPaymentInvoice.order_number}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium">Payment Status</p>
+                  <span className={`px-2 py-0.5 rounded-full border text-4xs font-bold uppercase tracking-wider inline-block mt-0.5 ${
+                    selectedPaymentInvoice.payment_status === 'Paid'
+                      ? 'bg-green-50 text-green-700 border-green-200'
+                      : selectedPaymentInvoice.payment_status === 'Partially Paid'
+                      ? 'bg-orange-50 text-orange-700 border-orange-200'
+                      : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                  }`}>
+                    {selectedPaymentInvoice.payment_status}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium">Invoice Amount</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{fmt(selectedPaymentInvoice.total_invoice_amount)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium">Total Amount Paid</p>
+                  <p className="font-semibold text-green-700 mt-0.5">{fmt(selectedPaymentInvoice.total_amount_paid)}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-medium">Remaining Balance</p>
+                  <p className="font-semibold text-orange-600 mt-0.5">{fmt(selectedPaymentInvoice.remaining_balance)}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Payment Transaction Log */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-gray-900 uppercase tracking-wide px-1">Payment Transaction Log</h4>
+              <DataTable
+                headers={[
+                  'Transaction Date & Time',
+                  'Payment Method',
+                  { label: 'Amount Paid', align: 'right' },
+                  { label: 'Remaining Balance After Payment', align: 'right' },
+                  'Payment Reference Number',
+                  'Remarks',
+                  'Verified By',
+                  'Verified On'
+                ]}
+                empty={selectedPaymentInvoice.payment_history.length === 0}
+              >
+                {selectedPaymentInvoice.payment_history.map((p) => (
+                  <tr key={p.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-3 text-gray-900 whitespace-nowrap">{fmtTime(p.verified_at)}</td>
+                    <td className="px-4 py-3">
+                      <span className="px-2 py-0.5 rounded bg-gray-150 text-gray-700 font-medium text-3xs uppercase">
+                        {p.payment_method === 'MO' ? 'Money Order' : p.payment_method}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right font-medium text-green-600">{fmt(p.payment_amount)}</td>
+                    <td className="px-4 py-3 text-right font-semibold text-orange-600">{fmt(p.remaining_balance_after)}</td>
+                    <td className="px-4 py-3 font-mono text-3xs text-gray-500">{p.payment_reference_no || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500 max-w-[120px] truncate">{p.remarks || '—'}</td>
+                    <td className="px-4 py-3 text-gray-700">{p.VerifiedBy?.name || '—'}</td>
+                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(p.verified_at)}</td>
+                  </tr>
+                ))}
+              </DataTable>
+            </div>
+            
+            <div className="flex justify-end pt-3">
+              <Button variant="secondary" onClick={() => setSelectedPaymentInvoice(null)}>
+                Close Details
+              </Button>
+            </div>
           </div>
         )}
       </Modal>
@@ -661,6 +865,6 @@ export default function AssignedStores() {
           </div>
         )}
       </Modal>
-    </div>
+    </PageLayout>
   )
 }

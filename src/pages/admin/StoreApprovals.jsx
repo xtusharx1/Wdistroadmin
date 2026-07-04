@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getShops, approveShop, rejectShop, resetShopPassword, updateShop, getUsers, createAssignment } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, LoadingState, EmptyState, Dialog as Modal } from '../../components/DesignSystem'
 import ShopPermitsTab from './ShopPermitsTab'
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
@@ -12,6 +12,7 @@ export default function StoreApprovals() {
   const [stores, setStores] = useState([])
   const [filter, setFilter] = useState('All')
   const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
   const [msg, setMsg] = useState(null)
   const [acting, setActing] = useState(null)
   const [resetFor, setResetFor] = useState(null)
@@ -36,6 +37,7 @@ export default function StoreApprovals() {
   const [approvingStore, setApprovingStore] = useState(null)
   const [selectedExecId, setSelectedExecId] = useState('')
   const [approving, setApproving] = useState(false)
+  const [allowExplicit, setAllowExplicit] = useState(false)
 
   const notify = (text, type = 'success') => {
     setMsg({ text, type })
@@ -59,15 +61,26 @@ export default function StoreApprovals() {
 
   const sortedStores = [...stores].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
 
-  const visible =
+  const visible = (
     filter === 'All' ? sortedStores : sortedStores.filter((s) => s.approval_status === filter)
+  ).filter((s) => {
+    const q = search.toLowerCase().trim()
+    if (!q) return true
+    return (
+      (s.shop_name || '').toLowerCase().includes(q) ||
+      (s.owner_name || '').toLowerCase().includes(q) ||
+      (s.email || '').toLowerCase().includes(q) ||
+      (s.city || '').toLowerCase().includes(q)
+    )
+  })
 
   const handleApprovalConfirm = async (e) => {
     e.preventDefault()
     if (!approvingStore) return
     setApproving(true)
     try {
-      await approveShop(approvingStore.id)
+      const res = await approveShop(approvingStore.id, { allow_explicit_products: allowExplicit })
+      const updatedShop = res.data?.data?.shop || {}
 
       let assignedText = ''
       if (selectedExecId) {
@@ -84,7 +97,7 @@ export default function StoreApprovals() {
       }
 
       setStores((prev) =>
-        prev.map((s) => (s.id === approvingStore.id ? { ...s, approval_status: 'Approved', approved: true } : s))
+        prev.map((s) => (s.id === approvingStore.id ? { ...s, approval_status: 'Approved', approved: true, allow_explicit_products: allowExplicit, ...updatedShop } : s))
       )
       notify(`Store approved${assignedText}.`)
       setApprovingStore(null)
@@ -138,7 +151,8 @@ export default function StoreApprovals() {
       city: store.city || '',
       state: store.state || '',
       zip: store.zip || '',
-      seller_permit: store.seller_permit || ''
+      seller_permit: store.seller_permit || '',
+      allow_explicit_products: store.allow_explicit_products === true
     })
   }
 
@@ -204,30 +218,34 @@ export default function StoreApprovals() {
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <h2 className="text-lg font-semibold text-gray-900">Stores</h2>
-        <div className="flex gap-1 flex-wrap">
+    <PageLayout>
+      <PageHeader
+        title="Stores"
+        subtitle={`${stores.filter(s => s.approval_status === 'Pending').length} pending approval`}
+      />
+
+      <TableToolbar>
+        <FilterBar>
           {FILTERS.map((f) => (
-            <button
+            <Button
               key={f}
+              variant={filter === f ? 'primary' : 'secondary'}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                filter === f
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-              }`}
+              className="py-1 px-3"
             >
               {f}
               {f === 'Pending' && (
-                <span className="ml-1.5 text-xs">
-                  ({stores.filter((s) => s.approval_status === 'Pending').length})
-                </span>
+                <span className="ml-1.5">({stores.filter((s) => s.approval_status === 'Pending').length})</span>
               )}
-            </button>
+            </Button>
           ))}
-        </div>
-      </div>
+        </FilterBar>
+        <SearchBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by store name, owner, or email..."
+        />
+      </TableToolbar>
 
       {msg && (
         <div
@@ -241,21 +259,10 @@ export default function StoreApprovals() {
         </div>
       )}
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[900px]">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                {['S.No', 'Store Name', 'Owner', 'Contact', 'City / State', 'Seller Permit', 'Submitted', 'Status', 'Actions'].map(
-                  (h) => (
-                    <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                      {h}
-                    </th>
-                  )
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
+      <DataTable
+        headers={['S.No', 'Store Name', 'Owner', 'Contact', 'City / State', 'Seller Permit', 'Submitted', 'Status', 'Actions']}
+        empty={visible.length === 0}
+      >
               {visible.map((s, index) => (
                 <tr key={s.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
@@ -283,58 +290,20 @@ export default function StoreApprovals() {
                   <td className="px-4 py-3">
                     <div className="flex gap-1.5 flex-wrap">
                       {s.approval_status !== 'Approved' && (
-                        <button
-                          onClick={() => { setApprovingStore(s); setSelectedExecId('') }}
-                          disabled={acting === s.id}
-                          className="text-xs px-2.5 py-1 rounded bg-green-600 hover:bg-green-700 text-white disabled:opacity-50 transition-colors whitespace-nowrap"
-                        >
-                          Approve
-                        </button>
+                        <Button variant="success" disabled={acting === s.id} onClick={() => { setApprovingStore(s); setSelectedExecId(''); setAllowExplicit(s.allow_explicit_products === true) }} className="py-0.5 px-2 text-2xs">Approve</Button>
                       )}
                       {s.approval_status !== 'Rejected' && (
-                        <button
-                          onClick={() => doReject(s)}
-                          disabled={acting === s.id}
-                          className="text-xs px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 transition-colors whitespace-nowrap"
-                        >
-                          Reject
-                        </button>
+                        <Button variant="danger" disabled={acting === s.id} onClick={() => doReject(s)} className="py-0.5 px-2 text-2xs">Reject</Button>
                       )}
-                      <button
-                        onClick={() => openEditModal(s)}
-                        className="text-xs px-2.5 py-1 rounded bg-yellow-500 hover:bg-yellow-600 text-white transition-colors whitespace-nowrap"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => { setResetFor(s); setNewPw('') }}
-                        className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 transition-colors whitespace-nowrap"
-                      >
-                        Reset PW
-                      </button>
-                      <button
-                        onClick={() => openLicenseModal(s)}
-                        className="text-xs px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium transition-colors whitespace-nowrap"
-                      >
-                        Licenses
-                      </button>
-                      <button
-                        onClick={() => setPermitsFor(s)}
-                        className="text-xs px-2.5 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 font-medium transition-colors whitespace-nowrap"
-                      >
-                        Permits
-                      </button>
+                      <Button variant="warning" onClick={() => openEditModal(s)} className="py-0.5 px-2 text-2xs">Edit</Button>
+                      <Button variant="secondary" onClick={() => { setResetFor(s); setNewPw('') }} className="py-0.5 px-2 text-2xs">Reset PW</Button>
+                      <Button variant="outlined" onClick={() => openLicenseModal(s)} className="py-0.5 px-2 text-2xs">Licenses</Button>
+                      <Button variant="outlined" onClick={() => setPermitsFor(s)} className="py-0.5 px-2 text-2xs">Permits</Button>
                     </div>
                   </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-        {visible.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-10">No stores in this category</p>
-        )}
-      </div>
+      </DataTable>
 
       {/* Edit Store Modal */}
       <Modal open={!!editStore} onClose={() => setEditStore(null)} title={`Edit Store — ${editStore?.shop_name}`}>
@@ -434,6 +403,19 @@ export default function StoreApprovals() {
               required
               className={inputClass}
             />
+          </div>
+
+          <div className="flex items-center gap-2 py-1">
+            <input
+              type="checkbox"
+              id="edit_allow_explicit_products"
+              checked={editForm.allow_explicit_products}
+              onChange={(e) => setEditForm({ ...editForm, allow_explicit_products: e.target.checked })}
+              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+            />
+            <label htmlFor="edit_allow_explicit_products" className="text-sm font-medium text-gray-700">
+              Allow Explicit Products (Approved shops only)
+            </label>
           </div>
 
           <div className="flex gap-3 pt-2">
@@ -575,6 +557,19 @@ export default function StoreApprovals() {
             </p>
           </div>
 
+          <div className="flex items-center gap-2 py-1">
+            <input
+              type="checkbox"
+              id="approve_allow_explicit_products"
+              checked={allowExplicit}
+              onChange={(e) => setAllowExplicit(e.target.checked)}
+              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4"
+            />
+            <label htmlFor="approve_allow_explicit_products" className="text-xs font-semibold text-gray-700">
+              Allow Explicit Products for this store
+            </label>
+          </div>
+
           <div className="flex flex-col gap-2 pt-2">
             <button
               type="submit"
@@ -589,9 +584,10 @@ export default function StoreApprovals() {
               onClick={async () => {
                 setApproving(true)
                 try {
-                  await approveShop(approvingStore.id)
+                  const res = await approveShop(approvingStore.id, { allow_explicit_products: allowExplicit })
+                  const updatedShop = res.data?.data?.shop || {}
                   setStores((prev) =>
-                    prev.map((s) => (s.id === approvingStore.id ? { ...s, approval_status: 'Approved', approved: true } : s))
+                    prev.map((s) => (s.id === approvingStore.id ? { ...s, approval_status: 'Approved', approved: true, allow_explicit_products: allowExplicit, ...updatedShop } : s))
                   )
                   notify('Store approved.')
                   setApprovingStore(null)
@@ -615,6 +611,6 @@ export default function StoreApprovals() {
           </div>
         </form>
       </Modal>
-    </div>
+    </PageLayout>
   )
 }

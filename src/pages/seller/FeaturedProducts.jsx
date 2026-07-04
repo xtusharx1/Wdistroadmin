@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getFeaturedProducts, getProducts, updateProduct } from '../../api'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, Dialog as Modal } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const input = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
@@ -10,6 +10,13 @@ export default function FeaturedProducts() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [removing, setRemoving] = useState(null)
+  const [mainSearch, setMainSearch] = useState('')
+
+  const filtered = featured.filter(p => {
+    const q = mainSearch.toLowerCase().trim()
+    if (!q) return true
+    return p.name?.toLowerCase().includes(q) || p.sku_id?.toLowerCase().includes(q)
+  })
 
   const [addOpen, setAddOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -99,35 +106,29 @@ export default function FeaturedProducts() {
   const featuredIds = new Set(featured.map(p => p.id))
 
   return (
-    <div className="p-4 sm:p-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl font-bold text-gray-900">Featured Products</h1>
-            {!loading && featured.length > 0 && (
-              <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-full">
-                {featured.length}
-              </span>
-            )}
-          </div>
-          <p className="text-sm text-gray-500 mt-0.5">Products highlighted on the mobile app home page.</p>
-        </div>
-        <button
-          onClick={openAddDialog}
-          className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 active:bg-indigo-800 transition-colors shadow-sm self-start sm:self-auto"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-          </svg>
-          Add Featured Product
-        </button>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Featured Products"
+        subtitle="Products highlighted on the mobile app home page."
+        action={
+          <Button onClick={openAddDialog}>+ Add Featured</Button>
+        }
+      />
 
       {error && (
         <div className="mb-5 flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
           <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           {error}
+        </div>
+      )}
+
+      {featured.length > 0 && (
+        <div className="flex items-center gap-3 bg-white p-3 border border-gray-200 rounded-xl shadow-2xs mb-4">
+          <SearchBar
+            value={mainSearch}
+            onChange={e => setMainSearch(e.target.value)}
+            placeholder="Search featured products by name or SKU..."
+          />
         </div>
       )}
 
@@ -162,9 +163,13 @@ export default function FeaturedProducts() {
             Add Featured Product
           </button>
         </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-sm text-gray-400 text-center py-20 bg-white border border-gray-200 rounded-xl">
+          No featured products match your search.
+        </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {featured.map(product => (
+          {filtered.map(product => (
             <div key={product.id} className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-200 hover:shadow-md transition-all duration-200">
               {/* Image */}
               <div className="relative h-40 bg-white flex items-center justify-center p-3 border-b border-gray-100">
@@ -362,6 +367,6 @@ export default function FeaturedProducts() {
           </div>
         </Modal>
       )}
-    </div>
+    </PageLayout>
   )
 }

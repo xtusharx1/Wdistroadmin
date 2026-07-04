@@ -6,11 +6,21 @@ import {
   deleteVariationGroup,
   getProducts,
 } from '../../api'
+import { PageLayout, PageHeader, Button, SearchBar, DataTable } from '../../components/DesignSystem'
 
 export default function VariationGroups() {
   const [groups, setGroups] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [mainSearch, setMainSearch] = useState('')
+
+  const filteredGroups = groups.filter(g => {
+    const query = mainSearch.toLowerCase().trim()
+    if (!query) return true
+    if (g.group_name.toLowerCase().includes(query)) return true
+    const prods = g.products || []
+    return prods.some(p => p.name.toLowerCase().includes(query))
+  })
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState(null)
@@ -35,7 +45,7 @@ export default function VariationGroups() {
   const loadGroups = async () => {
     try {
       const res = await getVariationGroups()
-      setGroups(res.data.data.groups)
+      setGroups(res.data.data.groups || [])
     } catch {
       setError('Failed to load variation groups')
     } finally {
@@ -117,13 +127,15 @@ export default function VariationGroups() {
     try {
       const payload = { group_name: formName.trim(), product_ids: [...selectedIds] }
       if (editingGroup) {
-        await updateVariationGroup(editingGroup.id, payload)
+        const res = await updateVariationGroup(editingGroup.id, payload)
+        const updated = { ...res.data.data.group, products: selectedProducts }
+        setGroups((prev) => prev.map((g) => (g.id === updated.id ? updated : g)))
       } else {
-        await createVariationGroup(payload)
+        const res = await createVariationGroup(payload)
+        const created = { ...res.data.data.group, products: selectedProducts }
+        setGroups((prev) => [...prev, created])
       }
       setDialogOpen(false)
-      setLoading(true)
-      await loadGroups()
     } catch (e) {
       setSaveError(e.response?.data?.message || 'Failed to save group')
     } finally {
@@ -136,89 +148,82 @@ export default function VariationGroups() {
     try {
       await deleteVariationGroup(id)
       setDeleteConfirm(null)
-      setLoading(true)
-      await loadGroups()
+      setGroups((prev) => prev.filter((g) => g.id !== id))
     } catch {
       setDeleting(false)
     }
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-gray-900">Product Variation Groups</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Link related products (Color, Size, Flavor, etc.) so buyers can switch between them on the product page.
-          </p>
-        </div>
-        <button
-          onClick={openCreate}
-          className="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition-colors self-start sm:self-auto"
-        >
-          + Create Group
-        </button>
+    <PageLayout>
+      <PageHeader
+        title="Product Variation Groups"
+        subtitle="Link related products (Color, Size, Flavor, etc.) so buyers can switch between them."
+        action={
+          <Button onClick={openCreate}>+ Create Group</Button>
+        }
+      />
+
+      <div className="flex items-center gap-3 bg-white p-3 border border-gray-200 rounded-xl shadow-2xs">
+        <SearchBar
+          value={mainSearch}
+          onChange={e => setMainSearch(e.target.value)}
+          placeholder="Search groups by group name or product name..."
+        />
       </div>
 
-      {/* Table */}
-      {loading ? (
-        <div className="text-sm text-gray-400">Loading…</div>
-      ) : error ? (
-        <div className="text-sm text-red-500">{error}</div>
-      ) : groups.length === 0 ? (
-        <div className="text-sm text-gray-400 text-center py-20">
-          No variation groups yet. Create one to link related products.
-        </div>
-      ) : (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden overflow-x-auto">
-          <table className="w-full text-sm min-w-[520px]">
-            <thead>
-              <tr className="border-b border-gray-100 bg-gray-50">
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Group Name</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600">Products</th>
-                <th className="text-center px-4 py-3 font-medium text-gray-600 w-16">Count</th>
-                <th className="text-left px-4 py-3 font-medium text-gray-600 w-28">Created</th>
-                <th className="px-4 py-3 w-24" />
-              </tr>
-            </thead>
-            <tbody>
-              {groups.map(g => {
-                const prods = g.products || []
-                return (
-                  <tr key={g.id} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 font-medium text-gray-900">{g.group_name}</td>
-                    <td className="px-4 py-3 text-gray-600">
-                      {prods.slice(0, 3).map(p => p.name).join(', ')}
-                      {prods.length > 3 && (
-                        <span className="text-gray-400"> +{prods.length - 3} more</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-center">{g.product_ids.length}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">
-                      {new Date(g.created_at).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => openEdit(g)}
-                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium mr-3"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteConfirm(g.id)}
-                        className="text-xs text-red-500 hover:text-red-700 font-medium"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {error && <div className="text-sm text-red-500 mb-4">{error}</div>}
+
+      <DataTable
+        headers={[
+          'S.No',
+          'Group Name',
+          'Products',
+          { label: 'Count', align: 'center', width: '64px' },
+          { label: 'Created', width: '112px' },
+          { label: 'Actions', align: 'right', width: '148px' }
+        ]}
+        empty={!loading && filteredGroups.length === 0}
+        loading={loading}
+      >
+        {filteredGroups.map((g, index) => {
+          const prods = g.products || []
+          return (
+            <tr key={g.id} className="hover:bg-gray-50 transition-colors">
+              <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
+              <td className="px-4 py-3 font-medium text-gray-900">{g.group_name}</td>
+              <td className="px-4 py-3 text-gray-600">
+                {prods.slice(0, 3).map(p => p.name).join(', ')}
+                {prods.length > 3 && (
+                  <span className="text-gray-400"> +{prods.length - 3} more</span>
+                )}
+              </td>
+              <td className="px-4 py-3 text-gray-600 text-center">{g.product_ids.length}</td>
+              <td className="px-4 py-3 text-gray-400 text-xs">
+                {new Date(g.created_at).toLocaleDateString()}
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex gap-2 justify-end">
+                  <Button
+                    variant="secondary"
+                    onClick={() => openEdit(g)}
+                    className="py-0.5 px-2 text-xs"
+                  >
+                    Edit
+                  </Button>
+                  <Button
+                    variant="danger"
+                    onClick={() => setDeleteConfirm(g.id)}
+                    className="py-0.5 px-2 text-xs"
+                  >
+                    Delete
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          )
+        })}
+      </DataTable>
 
       {/* Create / Edit Dialog */}
       {dialogOpen && (
@@ -384,6 +389,6 @@ export default function VariationGroups() {
           </div>
         </div>
       )}
-    </div>
+    </PageLayout>
   )
 }

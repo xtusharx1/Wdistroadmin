@@ -42,7 +42,7 @@ export const updateUser = (id, data) => http.patch(`/users/${id}`, data)
 
 // ── Shops ───────────────────────────────────────────────────────────────────
 export const getShops = () => http.get('/shops')
-export const approveShop = (id) => http.patch(`/shops/${id}/approve`)
+export const approveShop = (id, data) => http.patch(`/shops/${id}/approve`, data)
 export const rejectShop = (id) => http.patch(`/shops/${id}/reject`)
 export const updateShop = (id, data) => http.patch(`/shops/${id}`, data)
 
@@ -58,6 +58,16 @@ export const deleteProduct = (id) => http.delete(`/products/${id}`)
 export const uploadImage = (formData) =>
   http.post('/products/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
+export const importProducts = (formData) =>
+  http.post('/products/import', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+
+export const downloadImportTemplate = () =>
+  http.get('/products/import/template', {
+    responseType: 'blob',
   })
 
 // ── Orders ──────────────────────────────────────────────────────────────────
@@ -105,3 +115,18 @@ export const uploadInvoiceFile = (formData) =>
   http.post('/inventory-receiving/upload', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
+
+// ── Categories ───────────────────────────────────────────────────────────────
+export const getCategories = (params) => http.get('/categories', { params })
+export const createCategory = (data) => http.post('/categories', data)
+export const updateCategory = (id, data) => http.put(`/categories/${id}`, data)
+export const deleteCategory = (id) => http.delete(`/categories/${id}`)
+
+// ── Product Collections ──────────────────────────────────────────────────────
+export const getCollections = (params) => http.get('/collections', { params })
+export const createCollection = (data) => http.post('/collections', data)
+export const updateCollection = (id, data) => http.put(`/collections/${id}`, data)
+export const deleteCollection = (id) => http.delete(`/collections/${id}`)
+
+// ── Customer Payments ───────────────────────────────────────────────────────
+export const getCustomerPayments = (customerId) => http.get(`/customers/${customerId}/payments`)

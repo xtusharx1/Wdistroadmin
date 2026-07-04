@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getOrders, processOrder, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, getShops, editOrder, getProducts } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -18,6 +18,7 @@ export default function SellerOrders() {
   const [processModal, setProcessModal] = useState(null)
   const [detailModal, setDetailModal] = useState(null)
   const [acting, setActing] = useState(null)
+  const [search, setSearch] = useState('')
 
   const [invoice, setInvoice] = useState(null)
   const [loadingInvoice, setLoadingInvoice] = useState(false)
@@ -316,8 +317,16 @@ export default function SellerOrders() {
     }
   }
 
-  const visible =
+  const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
+
+  const visible = (
     filter === 'All' ? orders : orders.filter((o) => o.status === filter)
+  ).filter((o) => {
+    const q = search.toLowerCase().trim()
+    if (!q) return true
+    const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
+    return String(o.id).includes(q) || storeName.includes(q)
+  })
 
   const approvedTotal = processModal?.items.reduce(
     (s, item) => {
@@ -327,67 +336,45 @@ export default function SellerOrders() {
     0
   ) ?? 0
 
-  const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
-
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <h2 className="text-lg font-semibold text-gray-900">Orders</h2>
-        <span className="text-sm text-gray-500">
-          {orders.filter((o) => o.status === 'pending').length} pending
-        </span>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Orders"
+        subtitle={`${orders.filter((o) => o.status === 'pending').length} pending orders`}
+      />
 
-      {msg && (
-        <div
-          className={`mb-4 rounded-md px-4 py-2.5 text-sm ${
-            msg.type === 'error'
-              ? 'bg-red-50 text-red-700 border border-red-200'
-              : 'bg-green-50 text-green-700 border border-green-200'
-          }`}
-        >
-          {msg.text}
-        </div>
-      )}
+      <TableToolbar>
+        <FilterBar>
+          {FILTERS.map((f) => (
+            <Button
+              key={f}
+              variant={filter === f ? 'primary' : 'secondary'}
+              onClick={() => setFilter(f)}
+              className="py-1 px-3 capitalize"
+            >
+              {f}
+              {f === 'pending' && (
+                <span className="ml-1">({orders.filter((o) => o.status === 'pending').length})</span>
+              )}
+            </Button>
+          ))}
+        </FilterBar>
+        <SearchBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by order ID or store name..."
+        />
+      </TableToolbar>
 
-      <div className="flex gap-1 mb-4 flex-wrap">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-colors ${
-              filter === f
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-            }`}
-          >
-            {f}
-            {f === 'pending' && (
-              <span className="ml-1">
-                ({orders.filter((o) => o.status === 'pending').length})
-              </span>
-            )}
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[620px]">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {['Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Actions'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {visible.map((o) => (
+      <DataTable
+        headers={['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Actions']}
+        empty={visible.length === 0}
+      >
+            {visible.map((o, index) => (
               <tr key={o.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
                 <td className="px-4 py-3 font-medium">
                   <button
                     className="text-indigo-600 hover:underline"
@@ -449,13 +436,7 @@ export default function SellerOrders() {
                 </td>
               </tr>
             ))}
-          </tbody>
-        </table>
-        </div>
-        {visible.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-10">No orders in this category</p>
-        )}
-      </div>
+      </DataTable>
 
       {/* Order Detail Modal */}
       <Modal open={!!detailModal} onClose={() => setDetailModal(null)} title={`Order WS-${detailModal?.id}`} size="lg">
@@ -863,6 +844,6 @@ export default function SellerOrders() {
           </div>
         )}
       </Modal>
-    </div>
+    </PageLayout>
   )
 }

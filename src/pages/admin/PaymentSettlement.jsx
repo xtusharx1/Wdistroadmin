@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { getOrders, getShops, getInvoice, getAllPayments, addInvoicePayment } from '../../api'
+import { PageLayout, PageHeader, Button, SearchBar, DataTable } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
@@ -11,17 +12,19 @@ const statusBadge = (status) => {
 }
 
 export default function PaymentSettlement() {
-  const [tab, setTab] = useState('history')
+  const [tab, setTab] = useState('record')
 
   return (
-    <div className="p-4 sm:p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-1">Payment Settlement</h2>
-      <p className="text-sm text-gray-500 mb-5">Track and record invoice payments across all orders.</p>
+    <PageLayout>
+      <PageHeader
+        title="Payment Settlement"
+        subtitle="Track and record invoice payments across all orders."
+      />
 
-      <div className="flex gap-0 mb-6 border-b border-gray-200">
+      <div className="flex gap-0 border-b border-gray-200">
         {[
-          { key: 'history', label: 'Settlement History' },
           { key: 'record', label: 'Record Payment' },
+          { key: 'history', label: 'Settlement History' },
         ].map((t) => (
           <button
             key={t.key}
@@ -37,8 +40,8 @@ export default function PaymentSettlement() {
         ))}
       </div>
 
-      {tab === 'history' ? <HistoryTab /> : <RecordTab />}
-    </div>
+      {tab === 'record' ? <RecordTab /> : <HistoryTab />}
+    </PageLayout>
   )
 }
 
@@ -72,30 +75,19 @@ function HistoryTab() {
 
   return (
     <div>
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-        <p className="text-sm text-gray-500">{payments.length} payment{payments.length !== 1 ? 's' : ''} recorded</p>
-        <input
-          type="text"
-          placeholder="Search invoice, order, store, method…"
+      <div className="flex items-center gap-3 bg-white p-3 border border-gray-200 rounded-xl shadow-2xs mb-4">
+        <p className="text-sm text-gray-500 shrink-0">{payments.length} payment{payments.length !== 1 ? 's' : ''}</p>
+        <SearchBar
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-64"
+          placeholder="Search invoice, order, store, method..."
         />
       </div>
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                {['#', 'Invoice #', 'Order #', 'Customer', 'Method', 'Amount', 'Ref No', 'Remarks', 'Verified By', 'Date & Time'].map((h) => (
-                  <th key={h} className="px-3 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                    {h}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100">
+      <DataTable
+        headers={['#', 'Invoice #', 'Order #', 'Customer', 'Method', 'Amount', 'Ref No', 'Remarks', 'Verified By', 'Date & Time']}
+        empty={filtered.length === 0}
+      >
               {filtered.map((p, idx) => (
                 <tr key={p.id} className="hover:bg-gray-50">
                   <td className="px-3 py-3 text-gray-400 text-xs">{idx + 1}</td>
@@ -114,15 +106,7 @@ function HistoryTab() {
                   <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{fmtTime(p.verified_at)}</td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-        {filtered.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-10">
-            {search ? 'No payments match your search.' : 'No payments recorded yet.'}
-          </p>
-        )}
-      </div>
+      </DataTable>
     </div>
   )
 }
@@ -132,6 +116,8 @@ function RecordTab() {
   const [storeMap, setStoreMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+
+  const [filterType, setFilterType] = useState('pending') // 'all', 'pending', 'paid'
 
   const [selectedOrder, setSelectedOrder] = useState(null)
   const [invoice, setInvoice] = useState(null)
@@ -155,14 +141,27 @@ function RecordTab() {
   }, [])
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return orders
+    let result = orders
+    if (filterType === 'pending') {
+      result = orders.filter((o) => {
+        const remaining = o.Invoice ? o.Invoice.final_amount - (Number(o.Invoice.total_paid_amount) || 0) : o.total_amount
+        return remaining > 0.01
+      })
+    } else if (filterType === 'paid') {
+      result = orders.filter((o) => {
+        const remaining = o.Invoice ? o.Invoice.final_amount - (Number(o.Invoice.total_paid_amount) || 0) : o.total_amount
+        return remaining <= 0.01
+      })
+    }
+
+    if (!search.trim()) return result
     const q = search.toLowerCase()
-    return orders.filter((o) => {
+    return result.filter((o) => {
       const orderId = `ws-${o.id}`
       const shop = (storeMap[o.shop_id] || '').toLowerCase()
       return orderId.includes(q) || String(o.id).includes(q) || shop.includes(q)
     })
-  }, [orders, search, storeMap])
+  }, [orders, search, storeMap, filterType])
 
   const selectOrder = async (order) => {
     setSelectedOrder(order)
@@ -202,6 +201,14 @@ function RecordTab() {
       })
       const updatedInvoice = res.data.data.invoice
       setInvoice(updatedInvoice)
+      setOrders((prev) =>
+        prev.map((o) => {
+          if (o.Invoice && o.Invoice.id === updatedInvoice.id) {
+            return { ...o, Invoice: updatedInvoice }
+          }
+          return o
+        })
+      )
       setMethod('')
       setAmount('')
       setRefNo('')
@@ -231,6 +238,27 @@ function RecordTab() {
             className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
           />
         </div>
+        
+        <div className="flex gap-1.5 mb-3">
+          {[
+            { key: 'pending', label: 'Pending Balance' },
+            { key: 'paid', label: 'Fully Paid' },
+            { key: 'all', label: 'All Invoices' },
+          ].map((btn) => (
+            <button
+              key={btn.key}
+              onClick={() => setFilterType(btn.key)}
+              className={`px-2.5 py-1 rounded text-2xs font-semibold transition-colors border ${
+                filterType === btn.key
+                  ? 'bg-indigo-600 border-indigo-600 text-white'
+                  : 'bg-white border-gray-250 text-gray-600 hover:bg-gray-50'
+              }`}
+            >
+              {btn.label}
+            </button>
+          ))}
+        </div>
+
         {loading ? (
           <p className="text-sm text-gray-400 text-center py-8">Loading…</p>
         ) : (
@@ -238,6 +266,9 @@ function RecordTab() {
             <div className="max-h-[520px] overflow-y-auto divide-y divide-gray-100">
               {filtered.map((o) => {
                 const badge = statusBadge(o.Invoice?.payment_status || 'unsettled')
+                const total = o.Invoice?.final_amount || o.total_amount
+                const paid = Number(o.Invoice?.total_paid_amount) || 0
+                const balance = total - paid
                 return (
                   <button
                     key={o.id}
@@ -245,13 +276,20 @@ function RecordTab() {
                     className={`w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors ${selectedOrder?.id === o.id ? 'bg-indigo-50 border-l-2 border-indigo-500' : ''}`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-gray-900">WS-{o.id}</span>
-                      <span className={`text-xs px-1.5 py-0.5 rounded-full border font-medium ${badge.cls}`}>
+                      <span className="text-sm font-semibold text-gray-900">WS-{o.id}</span>
+                      <span className={`text-4xs px-1.5 py-0.5 rounded-full border font-bold uppercase tracking-wider ${badge.cls}`}>
                         {badge.label}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</p>
-                    <p className="text-xs text-gray-400 mt-0.5">{fmt(o.total_amount)}</p>
+                    <p className="text-xs text-gray-600 mt-1 font-medium">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</p>
+                    <div className="flex justify-between items-center text-3xs mt-1.5 pt-1.5 border-t border-gray-100">
+                      <span className="text-gray-400">Total: {fmt(total)}</span>
+                      {balance > 0.01 ? (
+                        <span className="font-semibold text-orange-600">Owes: {fmt(balance)}</span>
+                      ) : (
+                        <span className="font-semibold text-green-600">Paid</span>
+                      )}
+                    </div>
                   </button>
                 )
               })}

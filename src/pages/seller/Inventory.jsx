@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getProducts, updateStock, getDashboardStats } from '../../api'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 
@@ -145,60 +146,36 @@ export default function Inventory() {
   }
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <h2 className="text-lg font-semibold text-gray-900">Inventory / Stock</h2>
-        <input
-          type="text"
-          placeholder="Search product name…"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-60"
-        />
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Inventory / Stock"
+        subtitle={`${stockCounts.outOfStock || 0} out of stock · ${stockCounts.lowStock || 0} low stock`}
+      />
 
-      {(stockCounts.outOfStock > 0 || stockCounts.lowStock > 0) && (
-        <div className="mb-4 rounded-md bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-800">
-          {stockCounts.outOfStock > 0 && <span><strong>{stockCounts.outOfStock}</strong> out of stock. </span>}
-          {stockCounts.lowStock > 0 && <span><strong>{stockCounts.lowStock}</strong> running low (&lt;10 units).</span>}
-        </div>
-      )}
-
-      <div className="flex justify-between items-center mb-4">
-        <div className="flex gap-1">
+      <TableToolbar>
+        <FilterBar>
           {['All', 'Low Stock', 'Out of Stock'].map((f) => (
-            <button
+            <Button
               key={f}
+              variant={filter === f ? 'primary' : 'secondary'}
               onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                filter === f
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-              }`}
+              className="py-1 px-3"
             >
               {f}
-            </button>
+            </Button>
           ))}
-        </div>
+        </FilterBar>
+        <SearchBar
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search product name..."
+        />
+      </TableToolbar>
 
-        <div className="text-xs text-gray-500">
-          Showing {(pagination.page - 1) * LIMIT + 1} - {Math.min(pagination.page * LIMIT, pagination.total)} of {pagination.total} products
-        </div>
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[560px]">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {['S.No', 'Image', 'Name', 'Category', 'Price', 'Stock Qty', 'Save'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
+      <DataTable
+        headers={['S.No', 'Image', 'Name', 'Category', 'Price', 'Stock Qty', 'Save']}
+        empty={false}
+      >
             {loading ? (
               <tr>
                 <td colSpan="7" className="text-center py-10 text-gray-400 text-sm">
@@ -221,33 +198,15 @@ export default function Inventory() {
                 />
               ))
             )}
-          </tbody>
-        </table>
-        </div>
+      </DataTable>
 
-        {/* Server-side Pagination Controls */}
-        {pagination.totalPages > 1 && (
-          <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-            <button
-              onClick={() => loadProducts(pagination.page - 1)}
-              disabled={pagination.page === 1 || loading}
-              className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Previous
-            </button>
-            <div className="text-xs font-medium text-gray-700">
-              Page {pagination.page} of {pagination.totalPages}
-            </div>
-            <button
-              onClick={() => loadProducts(pagination.page + 1)}
-              disabled={pagination.page === pagination.totalPages || loading}
-              className="px-3 py-1.5 text-xs font-semibold rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              Next
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+      {pagination.totalPages > 1 && (
+        <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-b-xl flex items-center justify-between mt-0.5">
+          <Button variant="secondary" onClick={() => loadProducts(pagination.page - 1)} disabled={pagination.page === 1 || loading} className="py-1 px-3 text-xs">Previous</Button>
+          <div className="text-xs font-medium text-gray-700">Page {pagination.page} of {pagination.totalPages}</div>
+          <Button variant="secondary" onClick={() => loadProducts(pagination.page + 1)} disabled={pagination.page === pagination.totalPages || loading} className="py-1 px-3 text-xs">Next</Button>
+        </div>
+      )}
+    </PageLayout>
   )
 }

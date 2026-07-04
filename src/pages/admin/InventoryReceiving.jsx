@@ -7,6 +7,7 @@ import {
   getProducts
 } from '../../api'
 import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, DataTable, Dialog } from '../../components/DesignSystem'
 
 export default function InventoryReceiving() {
   const [activeTab, setActiveTab] = useState('history')
@@ -215,14 +216,11 @@ export default function InventoryReceiving() {
   }
 
   return (
-    <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">Inventory Receiving</h2>
-          <p className="text-xs text-gray-500 mt-1">Record supplier shipments, upload invoices, and log stock receipts.</p>
-        </div>
-      </div>
+    <PageLayout>
+      <PageHeader
+        title="Inventory Receiving"
+        subtitle="Record supplier shipments, upload invoices, and log stock receipts."
+      />
 
       {/* Notifications */}
       {notify && (
@@ -295,7 +293,7 @@ export default function InventoryReceiving() {
                 <table className="w-full text-sm text-left">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      {['Receipt Number', 'Total Products', 'Total Qty Received', 'Created By', 'Created At', 'View Invoice', 'View Details'].map((h) => (
+                      {['S.No', 'Receipt Number', 'Total Products', 'Total Qty Received', 'Created By', 'Created At', 'View Invoice', 'View Details'].map((h) => (
                         <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider ${h.includes('Qty') || h.includes('Products') ? 'text-center' : ''}`}>
                           {h}
                         </th>
@@ -303,10 +301,11 @@ export default function InventoryReceiving() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {receipts.map((r) => {
+                    {receipts.map((r, index) => {
                       const totalQty = (r.items || []).reduce((sum, item) => sum + item.quantity_received, 0)
                       return (
                         <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
                           <td className="px-4 py-3 font-semibold text-gray-900">{r.receipt_number}</td>
                           <td className="px-4 py-3 text-center">{r.items?.length || 0}</td>
                           <td className="px-4 py-3 text-center font-medium">{totalQty}</td>
@@ -619,7 +618,7 @@ export default function InventoryReceiving() {
           </div>
         )}
       </Modal>
-    </div>
+    </PageLayout>
   )
 }
 

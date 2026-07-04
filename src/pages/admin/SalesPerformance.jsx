@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getIncentives, getUsers } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
+import { PageLayout, PageHeader, SearchBar } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -49,20 +50,17 @@ export default function AdminSalesPerformance() {
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-4 sm:p-6 flex flex-col">
-      <div className="mb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">Sales Executive Performance</h2>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Track sales volume and orders driven by each salesperson (including past assignments)
-          </p>
-        </div>
-        <input
-          type="text"
-          placeholder="Search salesperson..."
+    <PageLayout>
+      <PageHeader
+        title="Sales Executive Performance"
+        subtitle="Track sales volume and orders driven by each salesperson."
+      />
+
+      <div className="flex items-center gap-3 bg-white p-3 border border-gray-200 rounded-xl shadow-2xs mb-4">
+        <SearchBar
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full md:w-64"
+          placeholder="Search salesperson..."
         />
       </div>
 
@@ -126,7 +124,7 @@ export default function AdminSalesPerformance() {
                 <table className="w-full text-sm min-w-[500px]">
                   <thead className="bg-gray-50 border-b border-gray-200 sticky top-0 z-10">
                     <tr>
-                      {['Order ID', 'Store Name', 'Date', 'Status', 'Order Amount'].map((h) => (
+                      {['S.No', 'Order ID', 'Store Name', 'Date', 'Status', 'Order Amount'].map((h) => (
                         <th key={h} className="px-6 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wide whitespace-nowrap">
                           {h}
                         </th>
@@ -134,8 +132,9 @@ export default function AdminSalesPerformance() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {selectedStats.orders.map((record) => (
+                    {selectedStats.orders.map((record, index) => (
                       <tr key={record.order?.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 text-gray-500 font-medium">{index + 1}</td>
                         <td className="px-6 py-4 font-medium text-gray-900">WS-{record.order?.id}</td>
                         <td className="px-6 py-4 text-gray-700">{record.shop?.shop_name || `Store #${record.shop?.id}`}</td>
                         <td className="px-6 py-4 text-gray-500">{fmtDate(record.order?.created_at)}</td>
@@ -161,6 +160,6 @@ export default function AdminSalesPerformance() {
           )}
         </div>
       </div>
-    </div>
+    </PageLayout>
   )
 }

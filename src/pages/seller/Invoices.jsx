@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getOrders, getInvoice, getShops, regenerateInvoice, addInvoicePayment } from '../../api'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
+import StatusBadge from '../../components/StatusBadge'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -19,6 +20,7 @@ export default function SellerInvoices() {
   const [invoiceModal, setInvoiceModal] = useState(null)
   const [fetching, setFetching] = useState(false)
   const [settling, setSettling] = useState(false)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     Promise.all([getOrders(), getShops()]).then(([oRes, sRes]) => {
@@ -67,58 +69,51 @@ export default function SellerInvoices() {
 
   const storeMap = stores.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
 
+  const visibleOrders = orders.filter((o) => {
+    const q = search.toLowerCase().trim()
+    if (!q) return true
+    const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
+    return String(o.id).includes(q) || storeName.includes(q)
+  })
+
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-4 sm:p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-5">Invoice History</h2>
-      <p className="text-sm text-gray-500 mb-4">
-        Invoices are automatically generated when an order is dispatched, delivered, or completed.
-      </p>
+    <PageLayout>
+      <PageHeader
+        title="Invoice History"
+        subtitle="Auto-generated when an order is dispatched, delivered, or completed."
+      />
 
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[560px]">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {['Order ID', 'Store', 'Items', 'Total', 'Status', 'Delivery Date', 'Invoice'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {orders.map((o) => (
+      <div className="flex items-center gap-3 bg-white p-3 border border-gray-200 rounded-xl shadow-2xs">
+        <SearchBar
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="Search by order ID or store name..."
+        />
+      </div>
+
+      <DataTable
+        headers={['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Delivery Date', 'Invoice']}
+        empty={visibleOrders.length === 0}
+      >
+            {visibleOrders.map((o, index) => (
               <tr key={o.id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">WS-{o.id}</td>
                 <td className="px-4 py-3 text-gray-500">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
                 <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
                 <td className="px-4 py-3 font-medium">{fmt(o.total_amount)}</td>
                 <td className="px-4 py-3">
-                  <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700 capitalize">
-                    {o.status}
-                  </span>
+                  <StatusBadge status={o.status} />
                 </td>
                 <td className="px-4 py-3 text-gray-500">{fmtDate(o.delivered_at || o.created_at)}</td>
                 <td className="px-4 py-3">
-                  <button
-                    onClick={() => openInvoice(o)}
-                    disabled={fetching}
-                    className="text-xs px-2.5 py-1 rounded bg-indigo-50 hover:bg-indigo-100 text-indigo-700 disabled:opacity-50 transition-colors"
-                  >
-                    View Invoice
-                  </button>
+                  <Button variant="outlined" disabled={fetching} onClick={() => openInvoice(o)} className="py-0.5 px-2 text-2xs">View Invoice</Button>
                 </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        </div>
-        {orders.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-10">No invoices yet</p>
-        )}
-      </div>
+              ))}
+      </DataTable>
 
       <Modal open={!!invoiceModal} onClose={() => setInvoiceModal(null)} title="Invoice" size="lg">
         {invoiceModal && (
@@ -133,7 +128,7 @@ export default function SellerInvoices() {
           />
         )}
       </Modal>
-    </div>
+    </PageLayout>
   )
 }
 

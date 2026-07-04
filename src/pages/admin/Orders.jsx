@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getOrders, getShops, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment, editOrder, getProducts, getOrderLogs } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import Modal from '../../components/Modal'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -372,57 +372,36 @@ export default function AdminOrders() {
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
-    <div className="p-4 sm:p-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-        <h2 className="text-lg font-semibold text-gray-900">Orders</h2>
-        <input
-          type="text"
-          placeholder="Search order ID…"
+    <PageLayout>
+      <PageHeader
+        title="Orders"
+        subtitle={`${orders.filter(o => o.status === 'pending').length} pending orders`}
+      />
+
+      <TableToolbar>
+        <FilterBar>
+          {FILTERS.map((f) => (
+            <Button
+              key={f}
+              variant={filter === f ? 'primary' : 'secondary'}
+              onClick={() => setFilter(f)}
+              className="py-1 px-3 capitalize"
+            >
+              {f}
+            </Button>
+          ))}
+        </FilterBar>
+        <SearchBar
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full sm:w-44"
+          placeholder="Search order ID or store..."
         />
-      </div>
+      </TableToolbar>
 
-      {msg && (
-        <div
-          className={`mb-4 rounded-md px-4 py-2.5 text-sm ${msg.type === 'error'
-              ? 'bg-red-50 text-red-700 border border-red-200'
-              : 'bg-green-50 text-green-700 border border-green-200'
-            }`}
-        >
-          {msg.text}
-        </div>
-      )}
-
-      <div className="flex gap-1 mb-4 flex-wrap">
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-1 rounded-md text-xs font-medium capitalize transition-colors ${filter === f
-                ? 'bg-indigo-600 text-white'
-                : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'
-              }`}
-          >
-            {f}
-          </button>
-        ))}
-      </div>
-
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[700px]">
-          <thead className="bg-gray-50 border-b border-gray-200">
-            <tr>
-              {['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Actions'].map((h) => (
-                <th key={h} className="px-4 py-2.5 text-left text-xs font-medium text-gray-500 uppercase tracking-wide whitespace-nowrap">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
+      <DataTable
+        headers={['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Actions']}
+        empty={visible.length === 0}
+      >
             {visible.map((o, index) => (
               <tr key={o.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
@@ -478,17 +457,11 @@ export default function AdminOrders() {
                         Invoice
                       </button>
                     )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {visible.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-10">No orders found</p>
-        )}
-        </div>
-      </div>
+            </div>
+          </td>
+        </tr>
+      ))}
+      </DataTable>
 
       {/* Order Detail Modal */}
       <Modal open={!!detail} onClose={() => setDetail(null)} title={`Order WS-${detail?.id}`} size="xl">
@@ -1125,6 +1098,6 @@ export default function AdminOrders() {
           </div>
         )}
       </Modal>
-    </div>
+    </PageLayout>
   )
 }
