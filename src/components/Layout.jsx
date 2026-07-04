@@ -1,39 +1,89 @@
-import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { getUser, clearUser } from '../auth'
 
 const NAV = {
   Admin: [
-    { label: 'Dashboard', path: '/admin/dashboard' },
-    { label: 'Stores', path: '/admin/stores' },
-    { label: 'Users', path: '/admin/users' },
-    { label: 'Assignments', path: '/admin/assignments' },
-    { label: 'Products', path: '/admin/products' },
-    { label: 'Featured Products', path: '/admin/featured-products' },
-    { label: 'Variation Groups', path: '/admin/variation-groups' },
-    { label: 'Category Management', path: '/admin/categories' },
-    { label: 'Product Collections', path: '/admin/collections' },
-    { label: 'Inventory', path: '/admin/inventory' },
-    { label: 'Inventory Receiving', path: '/admin/inventory-receiving' },
-    { label: 'Orders', path: '/admin/orders' },
-    { label: 'Invoices', path: '/admin/invoices' },
-    { label: 'Payments', path: '/admin/payments' },
-    { label: 'Sales Tracking', path: '/admin/sales-performance' },
+    {
+      title: 'Business',
+      items: [
+        { label: 'Dashboard', path: '/admin/dashboard' },
+        { label: 'Stores', path: '/admin/stores' },
+        { label: 'Users', path: '/admin/users' },
+        { label: 'Assignments', path: '/admin/assignments' },
+      ],
+    },
+    {
+      title: 'Catalog',
+      items: [
+        { label: 'Products', path: '/admin/products' },
+        { label: 'Featured Products', path: '/admin/featured-products' },
+        { label: 'Product Collections', path: '/admin/collections' },
+        { label: 'Variation Groups', path: '/admin/variation-groups' },
+        { label: 'Category Management', path: '/admin/categories' },
+      ],
+    },
+    {
+      title: 'Inventory',
+      items: [
+        { label: 'Inventory', path: '/admin/inventory' },
+        { label: 'Inventory Receiving', path: '/admin/inventory-receiving' },
+      ],
+    },
+    {
+      title: 'Sales',
+      items: [
+        { label: 'Orders', path: '/admin/orders' },
+        { label: 'Invoices', path: '/admin/invoices' },
+        { label: 'Payments', path: '/admin/payments' },
+        { label: 'Sales Tracking', path: '/admin/sales-performance' },
+      ],
+    },
   ],
   'Sales Executive': [
-    { label: 'Dashboard', path: '/sales/dashboard' },
-    { label: 'Assigned Stores', path: '/sales/stores' },
-    { label: 'Orders', path: '/sales/orders' },
-    { label: 'Payments', path: '/sales/payments' },
-    { label: 'My Performance', path: '/sales/performance' },
+    {
+      items: [
+        { label: 'Dashboard', path: '/sales/dashboard' },
+        { label: 'Assigned Stores', path: '/sales/stores' },
+        { label: 'Orders', path: '/sales/orders' },
+        { label: 'Payments', path: '/sales/payments' },
+        { label: 'My Performance', path: '/sales/performance' },
+      ],
+    },
   ],
 }
+
+const findActiveGroupTitle = (groups, pathname) =>
+  groups.find((g) => g.title && g.items.some((item) => item.path === pathname))?.title
 
 export default function Layout() {
   const user = getUser()
   const navigate = useNavigate()
-  const links = NAV[user?.role] || []
+  const location = useLocation()
+  const navGroups = NAV[user?.role] || []
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [expandedGroups, setExpandedGroups] = useState(() => {
+    const activeTitle = findActiveGroupTitle(navGroups, location.pathname)
+    return activeTitle ? new Set([activeTitle]) : new Set()
+  })
+
+  // Keep the section containing the active route expanded while navigating within it,
+  // without collapsing any section the user opened manually.
+  useEffect(() => {
+    const activeTitle = findActiveGroupTitle(navGroups, location.pathname)
+    if (!activeTitle) return
+    setExpandedGroups((prev) => (prev.has(activeTitle) ? prev : new Set(prev).add(activeTitle)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname])
+
+  const toggleGroup = (title) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev)
+      if (next.has(title)) next.delete(title)
+      else next.add(title)
+      return next
+    })
+  }
 
   const handleLogout = () => {
     clearUser()
@@ -76,22 +126,74 @@ export default function Layout() {
         </div>
 
         <nav className="flex-1 py-3 overflow-y-auto">
-          {links.map((link) => (
-            <NavLink
-              key={link.path}
-              to={link.path}
-              onClick={closeSidebar}
-              className={({ isActive }) =>
-                `flex items-center px-5 py-2.5 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-600'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                }`
-              }
-            >
-              {link.label}
-            </NavLink>
-          ))}
+          {navGroups.map((group, groupIndex) => {
+            if (!group.title) {
+              return (
+                <div key={groupIndex}>
+                  {group.items.map((link) => (
+                    <NavLink
+                      key={link.path}
+                      to={link.path}
+                      onClick={closeSidebar}
+                      className={({ isActive }) =>
+                        `flex items-center px-5 py-2.5 text-sm font-medium transition-colors ${
+                          isActive
+                            ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-600'
+                            : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        }`
+                      }
+                    >
+                      {link.label}
+                    </NavLink>
+                  ))}
+                </div>
+              )
+            }
+
+            const isOpen = expandedGroups.has(group.title)
+            return (
+              <div key={group.title} className={groupIndex > 0 ? 'mt-2 pt-2 border-t border-gray-100' : ''}>
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(group.title)}
+                  aria-expanded={isOpen}
+                  className="w-full flex items-center justify-between px-5 py-2 text-3xs font-bold uppercase tracking-wider text-gray-400 hover:text-gray-600 transition-colors"
+                >
+                  <span>{group.title}</span>
+                  <span
+                    className={`text-2xs transition-transform duration-200 ${isOpen ? 'rotate-90' : ''}`}
+                    aria-hidden="true"
+                  >
+                    ▶
+                  </span>
+                </button>
+                <div
+                  className={`grid transition-[grid-template-rows] duration-200 ease-in-out ${
+                    isOpen ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]'
+                  }`}
+                >
+                  <div className="overflow-hidden">
+                    {group.items.map((link) => (
+                      <NavLink
+                        key={link.path}
+                        to={link.path}
+                        onClick={closeSidebar}
+                        className={({ isActive }) =>
+                          `flex items-center px-5 py-2.5 text-sm font-medium transition-colors ${
+                            isActive
+                              ? 'bg-indigo-50 text-indigo-700 border-r-2 border-indigo-600'
+                              : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                          }`
+                        }
+                      >
+                        {link.label}
+                      </NavLink>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </nav>
 
         <div className="px-5 py-4 border-t border-gray-200">
