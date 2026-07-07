@@ -972,7 +972,6 @@ export default function Products() {
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs font-mono mt-2">
                   <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> Product Name</div>
                   <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> SKU</div>
-                  <div className="p-1.5 bg-white rounded border border-indigo-100">Barcode</div>
                   <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> Category</div>
                   <div className="p-1.5 bg-white rounded border border-indigo-100"><span className="text-red-600 font-bold">*</span> Subcategory</div>
                   <div className="p-1.5 bg-white rounded border border-indigo-100">Description</div>
