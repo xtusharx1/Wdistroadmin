@@ -32,6 +32,7 @@ export const resetShopPassword = (email, newPassword) =>
 
 // ── Dashboard ───────────────────────────────────────────────────────────────
 export const getDashboardStats = () => http.get('/dashboard/stats')
+export const getAdminOverview = () => http.get('/dashboard/admin-overview')
 
 // ── Users ───────────────────────────────────────────────────────────────────
 export const getUsers = () => http.get('/users')
