@@ -553,7 +553,7 @@ export default function AdminOrders() {
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
             </svg>
-            + Create Order
+            Create Order
           </Button>
         }
       />
@@ -1471,74 +1471,83 @@ export default function AdminOrders() {
                     type="text"
                     value={shopFilterSearch}
                     onChange={(e) => setShopFilterSearch(e.target.value)}
-                    placeholder="Search existing store by name, email, owner, or city..."
+                    placeholder="Search store by name, owner, phone number, email, or city..."
                     className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    autoFocus
                   />
                   <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </div>
 
-                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto divide-y divide-gray-100 bg-white">
-                  {(() => {
-                    const approvedShops = shopsList.filter((s) => s.approved)
-                    const filtered = approvedShops.filter((s) => {
-                      if (!shopFilterSearch.trim()) return true
-                      const q = shopFilterSearch.toLowerCase()
-                      return (
-                        (s.shop_name && s.shop_name.toLowerCase().includes(q)) ||
-                        (s.owner_name && s.owner_name.toLowerCase().includes(q)) ||
-                        (s.email && s.email.toLowerCase().includes(q)) ||
-                        (s.city && s.city.toLowerCase().includes(q)) ||
-                        (s.contact_number && s.contact_number.includes(q)) ||
-                        String(s.id).includes(q)
-                      )
-                    })
+                {!shopFilterSearch.trim() ? (
+                  <div className="p-5 border border-dashed border-gray-200 rounded-xl bg-gray-50/60 text-center">
+                    <svg className="w-6 h-6 mx-auto text-gray-300 mb-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                    <p className="text-xs font-semibold text-gray-700">Search for an Approved Store</p>
+                    <p className="text-2xs text-gray-400 mt-0.5">Type store name, owner name, phone number, email, or city to find and select a store.</p>
+                  </div>
+                ) : (
+                  <div className="border border-gray-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto divide-y divide-gray-100 bg-white shadow-2xs">
+                    {(() => {
+                      const approvedShops = shopsList.filter((s) => s.approved)
+                      const q = shopFilterSearch.toLowerCase().trim()
+                      const filtered = approvedShops.filter((s) => {
+                        return (
+                          (s.shop_name && s.shop_name.toLowerCase().includes(q)) ||
+                          (s.owner_name && s.owner_name.toLowerCase().includes(q)) ||
+                          (s.email && s.email.toLowerCase().includes(q)) ||
+                          (s.city && s.city.toLowerCase().includes(q)) ||
+                          (s.contact_number && s.contact_number.includes(q)) ||
+                          String(s.id).includes(q)
+                        )
+                      })
 
-                    if (filtered.length === 0) {
-                      return (
-                        <div className="p-6 text-center text-sm text-gray-400">
-                          {approvedShops.length === 0
-                            ? 'No approved stores found.'
-                            : `No approved stores found matching "${shopFilterSearch}".`}
-                        </div>
-                      )
-                    }
-
-                    return filtered.slice(0, 30).map((shop) => (
-                      <div
-                        key={shop.id}
-                        className="p-3 hover:bg-indigo-50/40 flex items-center justify-between gap-3 transition-colors cursor-pointer"
-                        onClick={() => setCreateSelectedShop(shop)}
-                      >
-                        <div className="min-w-0">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-sm text-gray-900 truncate">{shop.shop_name}</span>
-                            <span className="text-2xs text-gray-400">ID: {shop.id}</span>
-                            <span className="text-3xs px-1.5 py-0.5 rounded font-semibold uppercase bg-green-50 text-green-700 border border-green-200">
-                              Approved
-                            </span>
+                      if (filtered.length === 0) {
+                        return (
+                          <div className="p-6 text-center text-sm text-gray-400">
+                            No approved store found matching &ldquo;{shopFilterSearch}&rdquo;.
                           </div>
-                          <p className="text-xs text-gray-500 mt-0.5 truncate">
-                            {shop.owner_name && <span>{shop.owner_name} · </span>}
-                            {shop.email && <span>{shop.email} · </span>}
-                            {shop.city && <span>{shop.city}{shop.state ? `, ${shop.state}` : ''}</span>}
-                          </p>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          className="text-xs py-1 px-3 shrink-0"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setCreateSelectedShop(shop)
-                          }}
+                        )
+                      }
+
+                      return filtered.slice(0, 30).map((shop) => (
+                        <div
+                          key={shop.id}
+                          className="p-3 hover:bg-indigo-50/40 flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                          onClick={() => setCreateSelectedShop(shop)}
                         >
-                          Select
-                        </Button>
-                      </div>
-                    ))
-                  })()}
-                </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-sm text-gray-900 truncate">{shop.shop_name}</span>
+                              <span className="text-2xs text-gray-400">ID: {shop.id}</span>
+                              <span className="text-3xs px-1.5 py-0.5 rounded font-semibold uppercase bg-green-50 text-green-700 border border-green-200">
+                                Approved
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-500 mt-0.5 truncate">
+                              {shop.owner_name && <span>{shop.owner_name} · </span>}
+                              {shop.contact_number && <span>{shop.contact_number} · </span>}
+                              {shop.email && <span>{shop.email} · </span>}
+                              {shop.city && <span>{shop.city}{shop.state ? `, ${shop.state}` : ''}</span>}
+                            </p>
+                          </div>
+                          <Button
+                            variant="secondary"
+                            className="text-xs py-1 px-3 shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setCreateSelectedShop(shop)
+                            }}
+                          >
+                            Select
+                          </Button>
+                        </div>
+                      ))
+                    })()}
+                  </div>
+                )}
               </div>
             )}
           </div>
