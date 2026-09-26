@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { getOrders, getShops, getInvoice, regenerateInvoice, addInvoicePayment } from '../../api'
-import { PageLayout, PageHeader, Button, SearchBar, DataTable, LoadingState, Dialog as Modal, Pagination } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, LoadingState, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 import StatusBadge from '../../components/StatusBadge'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
 const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
+
+const PAYMENT_FILTERS = ['All', 'Unsettled', 'Partially Paid', 'Paid']
 
 const paymentBadge = (status) => {
   if (status === 'paid' || status === 'settled') return { label: '✓ Paid', cls: 'bg-green-50 text-green-700 border-green-200' }
@@ -20,13 +22,14 @@ export default function AdminInvoices() {
   const [invoiceModal, setInvoiceModal] = useState(null)
   const [invoiceFetching, setInvoiceFetching] = useState(false)
   const [settling, setSettling] = useState(false)
+  const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 15
 
   useEffect(() => {
     setPage(1)
-  }, [search])
+  }, [filter, search])
 
   useEffect(() => {
     Promise.all([getOrders(), getShops()]).then(([oRes, sRes]) => {
@@ -74,6 +77,16 @@ export default function AdminInvoices() {
     }
   }
   const visibleOrders = orders.filter((o) => {
+    if (filter === 'Paid') {
+      const st = o.Invoice?.payment_status
+      if (st !== 'paid' && st !== 'settled') return false
+    } else if (filter === 'Partially Paid') {
+      if (o.Invoice?.payment_status !== 'partially_paid') return false
+    } else if (filter === 'Unsettled') {
+      const st = o.Invoice?.payment_status || 'unsettled'
+      if (st === 'paid' || st === 'settled' || st === 'partially_paid') return false
+    }
+
     const q = search.toLowerCase().trim()
     if (!q) return true
     const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
@@ -93,13 +106,25 @@ export default function AdminInvoices() {
         subtitle="Auto-generated when an order is dispatched, delivered, or completed."
       />
 
-      <div className="flex items-center gap-3 bg-white p-3 border border-gray-200 rounded-xl shadow-2xs">
+      <TableToolbar>
+        <FilterBar>
+          {PAYMENT_FILTERS.map((f) => (
+            <Button
+              key={f}
+              variant={filter === f ? 'primary' : 'secondary'}
+              onClick={() => setFilter(f)}
+              className="py-1 px-3"
+            >
+              {f}
+            </Button>
+          ))}
+        </FilterBar>
         <SearchBar
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Search by invoice no, order ID, or store name..."
         />
-      </div>
+      </TableToolbar>
 
       <DataTable
         headers={['S.No', 'Invoice No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Action']}
