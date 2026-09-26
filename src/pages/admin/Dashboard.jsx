@@ -192,10 +192,10 @@ function KpiCard({ label, value, sub, icon, color = 'indigo' }) {
   return (
     <div className={`bg-gradient-to-br ${colorMap[color]} border rounded-xl px-4 py-4 flex items-start gap-3 transition-shadow hover:shadow-md`}>
       {icon && <div className={`shrink-0 w-9 h-9 rounded-lg flex items-center justify-center ${iconColorMap[color]}`}>{icon}</div>}
-      <div className="min-w-0">
-        <p className="text-2xs font-bold text-gray-500 uppercase tracking-wider truncate">{label}</p>
+      <div>
+        <p className="text-2xs font-bold text-gray-500 uppercase tracking-wider whitespace-nowrap">{label}</p>
         <p className={`text-xl font-extrabold mt-0.5 ${valColor[color]}`}>{value}</p>
-        {sub && <p className="text-2xs text-gray-400 font-medium mt-0.5 truncate">{sub}</p>}
+        {sub && <p className="text-2xs text-gray-400 font-medium mt-0.5">{sub}</p>}
       </div>
     </div>
   )
@@ -403,13 +403,13 @@ export default function AdminDashboard() {
       )}
 
       {/* ═══ 2. KPI CARDS ═══ */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
         <KpiCard label="Total Orders" value={fmtNum(kpi.totalOrders)} icon={Icons.order} color="indigo" />
         <KpiCard label="Today's Orders" value={fmtNum(kpi.ordersToday)} icon={Icons.today} color="blue" />
-        <KpiCard label="This Month" value={fmtNum(kpi.ordersThisMonth)} sub="Orders this month" icon={Icons.chart} color="purple" />
-        <KpiCard label="Total Revenue" value={fmt(kpi.totalRevenue)} sub="Delivered/completed" icon={Icons.revenue} color="green" />
-        <KpiCard label="Revenue (MTD)" value={fmt(kpi.revenueThisMonth)} sub="Month-to-date" icon={Icons.revenue} color="green" />
-        <KpiCard label="Avg. Order Value" value={fmtDecimal(kpi.avgOrderValue)} icon={Icons.avg} color="amber" />
+        <KpiCard label="Pending Orders" value={fmtNum(kpi.ordersThisMonth)} sub="This month" icon={Icons.chart} color="purple" />
+        <KpiCard label="Today's Sales" value={fmt(kpi.totalRevenue)} sub="Delivered / completed" icon={Icons.revenue} color="green" />
+        <KpiCard label="This Month's Sales" value={fmt(kpi.revenueThisMonth)} icon={Icons.revenue} color="green" />
+        <KpiCard label="Average Order Value" value={fmtDecimal(kpi.avgOrderValue)} icon={Icons.avg} color="amber" />
       </div>
 
       {/* ═══ 3 & 4. SALES OVERVIEW + ORDER STATUS ═══ */}
