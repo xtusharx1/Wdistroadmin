@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getOrders, processOrder, updateOrderStatus, deleteOrder, getInvoice, generateInvoice, regenerateInvoice, getShops, editOrder, getProducts } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -341,6 +341,9 @@ export default function SellerOrders() {
 
   const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
 
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 15
+
   const visible = orders.filter((o) => {
     if (filter === 'Cancelled / Rejected') {
       if (o.status !== 'cancelled' && o.status !== 'rejected') return false
@@ -352,6 +355,13 @@ export default function SellerOrders() {
     const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
     return String(o.id).includes(q) || storeName.includes(q)
   })
+
+  useEffect(() => {
+    setPage(1)
+  }, [filter, search])
+
+  const totalPages = Math.ceil(visible.length / PAGE_SIZE)
+  const paginatedOrders = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const approvedTotal = processModal?.items.reduce(
     (s, item) => {
@@ -397,9 +407,9 @@ export default function SellerOrders() {
         headers={['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Actions']}
         empty={visible.length === 0}
       >
-            {visible.map((o, index) => (
+            {paginatedOrders.map((o, index) => (
               <tr key={o.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
+                <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * PAGE_SIZE + index + 1}</td>
                 <td className="px-4 py-3 font-medium">
                   <button
                     className="text-indigo-600 hover:underline"
@@ -484,6 +494,14 @@ export default function SellerOrders() {
               </tr>
             ))}
       </DataTable>
+
+      {/* Pagination */}
+      <Pagination
+        current={page}
+        totalPages={totalPages}
+        totalItems={visible.length}
+        onPageChange={setPage}
+      />
 
       {/* Order Detail Modal */}
       <Modal open={!!detailModal} onClose={() => setDetailModal(null)} title={`Order WS-${detailModal?.id}`} size="lg">

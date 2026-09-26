@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { getFeaturedProducts, getProducts, updateProduct } from '../../api'
-import { PageLayout, PageHeader, Button, SearchBar, Dialog as Modal } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const input = 'w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500'
@@ -11,6 +11,12 @@ export default function FeaturedProducts() {
   const [error, setError] = useState(null)
   const [removing, setRemoving] = useState(null)
   const [mainSearch, setMainSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 12
+
+  useEffect(() => {
+    setPage(1)
+  }, [mainSearch])
 
   const filtered = featured.filter(p => {
     const q = mainSearch.toLowerCase().trim()
@@ -168,107 +174,116 @@ export default function FeaturedProducts() {
           No featured products match your search.
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map(product => (
-            <div key={product.id} className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-200 hover:shadow-md transition-all duration-200">
-              {/* Image */}
-              <div className="relative h-40 bg-white flex items-center justify-center p-3 border-b border-gray-100">
-                {product.image_url ? (
-                  <img
-                    src={product.image_url}
-                    alt={product.name}
-                    className="max-h-full max-w-full object-contain"
-                    style={{ maxHeight: '136px' }}
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-md">
-                    <span className="text-4xl font-black text-indigo-200 select-none">
-                      {product.name?.charAt(0)?.toUpperCase() ?? '?'}
-                    </span>
+        <>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map(product => (
+              <div key={product.id} className="group bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-200 hover:shadow-md transition-all duration-200">
+                {/* Image */}
+                <div className="relative h-40 bg-white flex items-center justify-center p-3 border-b border-gray-100">
+                  {product.image_url ? (
+                    <img
+                      src={product.image_url}
+                      alt={product.name}
+                      className="max-h-full max-w-full object-contain"
+                      style={{ maxHeight: '136px' }}
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-md">
+                      <span className="text-4xl font-black text-indigo-200 select-none">
+                        {product.name?.charAt(0)?.toUpperCase() ?? '?'}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Badges */}
+                  <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
+                    {product.is_clearance && (
+                      <span className="px-2 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded-md shadow-sm tracking-wide">
+                        SALE
+                      </span>
+                    )}
+                    {!product.is_active && (
+                      <span className="px-2 py-0.5 bg-gray-700/80 text-white text-[10px] font-bold rounded-md shadow-sm tracking-wide">
+                        INACTIVE
+                      </span>
+                    )}
                   </div>
-                )}
 
-                {/* Badges */}
-                <div className="absolute top-2.5 left-2.5 flex flex-col gap-1">
-                  {product.is_clearance && (
-                    <span className="px-2 py-0.5 bg-orange-500 text-white text-[10px] font-bold rounded-md shadow-sm tracking-wide">
-                      SALE
-                    </span>
-                  )}
-                  {!product.is_active && (
-                    <span className="px-2 py-0.5 bg-gray-700/80 text-white text-[10px] font-bold rounded-md shadow-sm tracking-wide">
-                      INACTIVE
-                    </span>
-                  )}
-                </div>
-
-                {/* Remove on hover */}
-                <button
-                  onClick={() => handleRemove(product.id)}
-                  disabled={removing === product.id}
-                  className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white shadow-md text-gray-400 hover:text-red-500 hover:shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 disabled:opacity-50"
-                  title="Remove from featured"
-                >
-                  {removing === product.id ? (
-                    <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-                    </svg>
-                  ) : (
-                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-
-              {/* Info */}
-              <div className="p-4">
-                <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider mb-1">{product.sub_category}</p>
-                <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug mb-3">{product.name}</p>
-
-                {/* Price row */}
-                <div className="flex items-end gap-2 mb-3">
-                  {product.is_clearance && product.clearance_price ? (
-                    <>
-                      <span className="text-base font-bold text-orange-600">{fmt(product.clearance_price)}</span>
-                      <span className="text-xs text-gray-400 line-through mb-0.5">{fmt(product.price)}</span>
-                    </>
-                  ) : (
-                    <span className="text-base font-bold text-gray-900">{fmt(product.price)}</span>
-                  )}
-                </div>
-
-                {/* Meta row */}
-                <div className="flex items-center justify-between text-xs text-gray-400 mb-3">
-                  <span>{product.sku_id || <span className="italic">No SKU</span>}</span>
-                  <span className={
-                    product.stock_quantity === 0 ? 'text-red-500 font-medium' :
-                    product.stock_quantity < 10 ? 'text-amber-500 font-medium' :
-                    'text-gray-400'
-                  }>
-                    {product.stock_quantity === 0 ? 'Out of stock' : `${product.stock_quantity} in stock`}
-                  </span>
-                </div>
-
-                {/* Footer */}
-                <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${product.is_active ? 'text-green-600' : 'text-gray-400'}`}>
-                    <span className={`w-1.5 h-1.5 rounded-full ${product.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
-                    {product.is_active ? 'Active' : 'Inactive'}
-                  </span>
+                  {/* Remove on hover */}
                   <button
                     onClick={() => handleRemove(product.id)}
                     disabled={removing === product.id}
-                    className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors disabled:opacity-40"
+                    className="absolute top-2.5 right-2.5 w-7 h-7 rounded-full bg-white shadow-md text-gray-400 hover:text-red-500 hover:shadow-lg flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-200 disabled:opacity-50"
+                    title="Remove from featured"
                   >
-                    {removing === product.id ? 'Removing…' : 'Remove'}
+                    {removing === product.id ? (
+                      <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      </svg>
+                    ) : (
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    )}
                   </button>
                 </div>
+
+                {/* Info */}
+                <div className="p-4">
+                  <p className="text-[10px] font-semibold text-indigo-600 uppercase tracking-wider mb-1">{product.sub_category}</p>
+                  <p className="text-sm font-semibold text-gray-900 line-clamp-2 leading-snug mb-3">{product.name}</p>
+
+                  {/* Price row */}
+                  <div className="flex items-end gap-2 mb-3">
+                    {product.is_clearance && product.clearance_price ? (
+                      <>
+                        <span className="text-base font-bold text-orange-600">{fmt(product.clearance_price)}</span>
+                        <span className="text-xs text-gray-400 line-through mb-0.5">{fmt(product.price)}</span>
+                      </>
+                    ) : (
+                      <span className="text-base font-bold text-gray-900">{fmt(product.price)}</span>
+                    )}
+                  </div>
+
+                  {/* Meta row */}
+                  <div className="flex items-center justify-between text-xs text-gray-400 mb-3">
+                    <span>{product.sku_id || <span className="italic">No SKU</span>}</span>
+                    <span className={
+                      product.stock_quantity === 0 ? 'text-red-500 font-medium' :
+                      product.stock_quantity < 10 ? 'text-amber-500 font-medium' :
+                      'text-gray-400'
+                    }>
+                      {product.stock_quantity === 0 ? 'Out of stock' : `${product.stock_quantity} in stock`}
+                    </span>
+                  </div>
+
+                  {/* Footer */}
+                  <div className="flex items-center justify-between pt-3 border-t border-gray-100">
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${product.is_active ? 'text-green-600' : 'text-gray-400'}`}>
+                      <span className={`w-1.5 h-1.5 rounded-full ${product.is_active ? 'bg-green-500' : 'bg-gray-400'}`} />
+                      {product.is_active ? 'Active' : 'Inactive'}
+                    </span>
+                    <button
+                      onClick={() => handleRemove(product.id)}
+                      disabled={removing === product.id}
+                      className="text-xs text-red-500 hover:text-red-700 font-medium transition-colors disabled:opacity-40"
+                    >
+                      {removing === product.id ? 'Removing…' : 'Remove'}
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+
+          <Pagination
+            current={page}
+            totalPages={Math.ceil(filtered.length / PAGE_SIZE)}
+            totalItems={filtered.length}
+            onPageChange={setPage}
+          />
+        </>
       )}
 
       {/* Add Featured Product Dialog */}

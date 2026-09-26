@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { getShops, approveShop, rejectShop, resetShopPassword, updateShop, deleteShop, getUsers, createAssignment } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, ConfirmationDialog } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, ConfirmationDialog, Pagination } from '../../components/DesignSystem'
 import ShopPermitsTab from './ShopPermitsTab'
 
 const FILTERS = ['All', 'Pending', 'Approved', 'Rejected']
@@ -64,7 +64,14 @@ export default function StoreApprovals() {
       .catch((err) => console.error('Failed to load users', err))
   }, [])
 
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 15
+
   const sortedStores = [...stores].sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+
+  useEffect(() => {
+    setPage(1)
+  }, [filter, search])
 
   const visible = (
     filter === 'All' ? sortedStores : sortedStores.filter((s) => s.approval_status === filter)
@@ -82,6 +89,9 @@ export default function StoreApprovals() {
       (s.tobacco_license || '').toLowerCase().includes(q)
     )
   })
+
+  const totalPages = Math.ceil(visible.length / PAGE_SIZE)
+  const paginatedStores = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const handleApprovalConfirm = async (e) => {
     e.preventDefault()
@@ -260,11 +270,11 @@ export default function StoreApprovals() {
         headers={tableHeaders}
         empty={visible.length === 0}
       >
-        {visible.map((s, index) => (
+        {paginatedStores.map((s, index) => (
           <tr key={s.id} className="hover:bg-indigo-50/20 transition-colors border-b border-gray-150 last:border-b-0">
             {/* 1. S.No (5%) */}
             <td className="px-4 py-3 text-center text-gray-400 font-semibold align-middle whitespace-nowrap text-xs">
-              {index + 1}
+              {(page - 1) * PAGE_SIZE + index + 1}
             </td>
 
             {/* 2. Store Name (25%) */}
@@ -373,6 +383,13 @@ export default function StoreApprovals() {
           </tr>
         ))}
       </DataTable>
+
+      <Pagination
+        current={page}
+        totalPages={totalPages}
+        totalItems={visible.length}
+        onPageChange={setPage}
+      />
 
       {/* Edit Store Modal */}
       <Modal open={!!editStore} onClose={() => setEditStore(null)} title={`Edit Store — ${editStore?.shop_name}`}>

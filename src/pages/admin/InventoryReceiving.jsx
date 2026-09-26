@@ -7,7 +7,7 @@ import {
   getProducts
 } from '../../api'
 import Modal from '../../components/Modal'
-import { PageLayout, PageHeader, Button, SearchBar, DataTable, Dialog } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, DataTable, Dialog, Pagination } from '../../components/DesignSystem'
 
 export default function InventoryReceiving() {
   const [activeTab, setActiveTab] = useState('history')
@@ -17,6 +17,12 @@ export default function InventoryReceiving() {
   const [detailReceipt, setDetailReceipt] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [notify, setNotify] = useState(null)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 15
+
+  useEffect(() => {
+    setPage(1)
+  }, [activeTab, search])
 
   // Form states for New Stock Receipt
   const [remarks, setRemarks] = useState('')
@@ -301,11 +307,11 @@ export default function InventoryReceiving() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {receipts.map((r, index) => {
+                    {receipts.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((r, index) => {
                       const totalQty = (r.items || []).reduce((sum, item) => sum + item.quantity_received, 0)
                       return (
                         <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
+                          <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * PAGE_SIZE + index + 1}</td>
                           <td className="px-4 py-3 font-semibold text-gray-900">{r.receipt_number}</td>
                           <td className="px-4 py-3 text-center">{r.items?.length || 0}</td>
                           <td className="px-4 py-3 text-center font-medium">{totalQty}</td>
@@ -346,6 +352,13 @@ export default function InventoryReceiving() {
               </div>
             )}
           </div>
+
+          <Pagination
+            current={page}
+            totalPages={Math.ceil(receipts.length / PAGE_SIZE)}
+            totalItems={receipts.length}
+            onPageChange={setPage}
+          />
         </div>
       ) : (
         /* New Stock Receipt Form */

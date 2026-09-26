@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getUser } from '../../auth'
 import { getSalesAssignments, getOrders, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -18,6 +18,12 @@ export default function SalesOrders() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 15
+
+  useEffect(() => {
+    setPage(1)
+  }, [filter, search])
   
   // Modals state
   const [detail, setDetail] = useState(null)
@@ -225,6 +231,9 @@ export default function SalesOrders() {
     return String(o.id).includes(q) || storeName.includes(q)
   })
 
+  const totalPages = Math.ceil(visible.length / PAGE_SIZE)
+  const paginatedOrders = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   if (loading && orders.length === 0) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   if (assignedStoreIds.size === 0) {
@@ -269,9 +278,9 @@ export default function SalesOrders() {
         headers={['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Detail']}
         empty={visible.length === 0}
       >
-        {visible.map((o, index) => (
+        {paginatedOrders.map((o, index) => (
           <tr key={o.id} className="hover:bg-gray-50">
-            <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
+            <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * PAGE_SIZE + index + 1}</td>
             <td className="px-4 py-3 font-medium text-gray-900">WS-{o.id}</td>
             <td className="px-4 py-3 text-gray-700">
               {storeMap[o.shop_id] || `Store #${o.shop_id}`}
@@ -286,6 +295,13 @@ export default function SalesOrders() {
           </tr>
         ))}
       </DataTable>
+
+      <Pagination
+        current={page}
+        totalPages={totalPages}
+        totalItems={visible.length}
+        onPageChange={setPage}
+      />
 
       {/* Order Detail Modal */}
       <Modal open={!!detail} onClose={() => setDetail(null)} title={`Order WS-${detail?.id}`} size="lg">

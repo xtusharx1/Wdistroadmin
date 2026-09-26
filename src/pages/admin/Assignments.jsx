@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getAssignments, getUsers, getShops, createAssignment, endAssignment, updateAssignment, getIncentives } from '../../api'
-import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, LoadingState, Dialog as Modal, Field } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, LoadingState, Dialog as Modal, Field, Pagination } from '../../components/DesignSystem'
 import StatusBadge from '../../components/StatusBadge'
 
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
@@ -103,6 +103,13 @@ export default function Assignments() {
     }
   }
 
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 15
+
+  useEffect(() => {
+    setPage(1)
+  }, [filter, search])
+
   const visible = (
     filter === 'Active'
       ? assignments.filter((a) => !a.end_date)
@@ -116,6 +123,9 @@ export default function Assignments() {
     const storeName = a.Shop?.name?.toLowerCase() || ''
     return execName.includes(q) || storeName.includes(q)
   })
+
+  const totalPages = Math.ceil(visible.length / PAGE_SIZE)
+  const paginatedAssignments = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   if (loading) return <LoadingState message="Loading assignments..." />
 
@@ -167,59 +177,63 @@ export default function Assignments() {
         headers={['S.No', 'Sales Executive', 'Assigned Store', 'Start Date', 'End Date', 'Status', 'Actions']}
         empty={visible.length === 0}
       >
-              {visible.map((a, index) => {
-                const isActive = !a.end_date
-                return (
-                  <tr key={a.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
-                    <td className="px-4 py-3">
-                      <p className="font-medium text-gray-900">
-                        {a.SalesExecutive?.name || `Exec #${a.sales_exec_id}`}
-                      </p>
-                      {a.SalesExecutive?.email && (
-                        <p className="text-xs text-gray-400 mt-0.5">{a.SalesExecutive.email}</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-gray-700">{a.Shop?.shop_name || `Store #${a.shop_id}`}</p>
-                      {(a.Shop?.city || a.Shop?.state) && (
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {[a.Shop.city, a.Shop.state].filter(Boolean).join(', ')}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.start_date)}</td>
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.end_date)}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={isActive ? 'active' : 'inactive'} type="user" />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex gap-1.5 flex-wrap">
-                        <Button
-                          variant="outlined"
-                          onClick={() => openEdit(a)}
-                          className="py-1 px-2 text-2xs"
-                        >
-                          Edit
-                        </Button>
-                        {isActive && (
-                          <Button
-                            variant="danger"
-                            onClick={() => doEnd(a)}
-                            className="py-1 px-2 text-2xs"
-                          >
-                            End Assignment
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-            })}
-          </DataTable>
-        {visible.length === 0 && (
-          <p className="text-center text-gray-400 text-sm py-10">No assignments found</p>
-        )}
+        {paginatedAssignments.map((a, index) => {
+          const isActive = !a.end_date
+          return (
+            <tr key={a.id} className="hover:bg-gray-50">
+              <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * PAGE_SIZE + index + 1}</td>
+              <td className="px-4 py-3">
+                <p className="font-medium text-gray-900">
+                  {a.SalesExecutive?.name || `Exec #${a.sales_exec_id}`}
+                </p>
+                {a.SalesExecutive?.email && (
+                  <p className="text-xs text-gray-400 mt-0.5">{a.SalesExecutive.email}</p>
+                )}
+              </td>
+              <td className="px-4 py-3">
+                <p className="text-gray-700">{a.Shop?.shop_name || `Store #${a.shop_id}`}</p>
+                {(a.Shop?.city || a.Shop?.state) && (
+                  <p className="text-xs text-gray-400 mt-0.5">
+                    {[a.Shop.city, a.Shop.state].filter(Boolean).join(', ')}
+                  </p>
+                )}
+              </td>
+              <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.start_date)}</td>
+              <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(a.end_date)}</td>
+              <td className="px-4 py-3">
+                <StatusBadge status={isActive ? 'active' : 'inactive'} type="user" />
+              </td>
+              <td className="px-4 py-3">
+                <div className="flex gap-1.5 flex-wrap">
+                  <Button
+                    variant="outlined"
+                    onClick={() => openEdit(a)}
+                    className="py-1 px-2 text-2xs"
+                  >
+                    Edit
+                  </Button>
+                  {isActive && (
+                    <Button
+                      variant="danger"
+                      onClick={() => doEnd(a)}
+                      className="py-1 px-2 text-2xs"
+                    >
+                      End Assignment
+                    </Button>
+                  )}
+                </div>
+              </td>
+            </tr>
+          )
+        })}
+      </DataTable>
+
+      <Pagination
+        current={page}
+        totalPages={totalPages}
+        totalItems={visible.length}
+        onPageChange={setPage}
+      />
 
       {/* Create / Edit Assignment Modal */}
       <Modal open={createModal} onClose={() => setCreateModal(false)} title={editAssignment ? 'Edit Store Assignment' : 'Assign Store to Sales Executive'} size="md">

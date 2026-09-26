@@ -5,13 +5,19 @@ import {
   updateCategory,
   deleteCategory
 } from '../../api'
-import { PageLayout, PageHeader, Button, SearchBar, Dialog as Modal, Field } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, Dialog as Modal, Field, Pagination } from '../../components/DesignSystem'
 
 export default function CategoryManagement() {
   const [categories, setCategories] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [notify, setNotify] = useState(null)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 10
+
+  useEffect(() => {
+    setPage(1)
+  }, [search])
   
   // Modal states
   const [modalOpen, setModalOpen] = useState(false)
@@ -276,7 +282,7 @@ export default function CategoryManagement() {
             No categories found.
           </div>
         ) : (
-          categories.map((cat) => {
+          categories.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((cat) => {
             const isExpanded = !!expandedCards[cat.id]
             return (
               <div
@@ -512,6 +518,13 @@ export default function CategoryManagement() {
           })
         )}
       </div>
+
+      <Pagination
+        current={page}
+        totalPages={Math.ceil(categories.length / PAGE_SIZE)}
+        totalItems={categories.length}
+        onPageChange={setPage}
+      />
 
       {/* Create / Edit Category Modal */}
       <Modal

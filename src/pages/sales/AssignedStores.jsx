@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getUser } from '../../auth'
 import { getSalesAssignments, getOrders, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, getCustomerPayments } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, Dialog as Modal, DataTable } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, Dialog as Modal, DataTable, Pagination } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
@@ -158,6 +158,13 @@ export default function AssignedStores() {
     }
   }
 
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 12
+
+  useEffect(() => {
+    setPage(1)
+  }, [filter, search])
+
   const visible = (
     filter === 'Active'
       ? assignments.filter((a) => !a.end_date)
@@ -172,6 +179,9 @@ export default function AssignedStores() {
     const email = a.Shop?.email?.toLowerCase() || ''
     return storeName.includes(q) || ownerName.includes(q) || email.includes(q)
   })
+
+  const totalPages = Math.ceil(visible.length / PAGE_SIZE)
+  const paginatedAssignments = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   if (loading && assignments.length === 0) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
@@ -207,67 +217,76 @@ export default function AssignedStores() {
           <p className="text-gray-400 text-sm">No assigned stores in this category</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {visible.map((a) => {
-            const shop = a.Shop || {}
-            const isActive = !a.end_date
-            return (
-              <div
-                key={a.id}
-                className={`bg-white rounded-lg border p-5 ${
-                  isActive ? 'border-gray-200' : 'border-gray-100 opacity-70'
-                }`}
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <h3 className="font-semibold text-gray-900 text-sm">
-                      {shop.shop_name || `Store #${a.shop_id}`}
-                    </h3>
-                    <p className="text-xs text-gray-500 mt-0.5">{shop.owner_name || '—'}</p>
-                  </div>
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-xs font-medium ${
-                      isActive
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-gray-100 text-gray-500'
-                    }`}
-                  >
-                    {isActive ? 'Active' : 'Ended'}
-                  </span>
-                </div>
-
-                <div className="space-y-1.5 text-xs text-gray-600">
-                  {shop.contact_details && (
-                    <div className="flex gap-2">
-                      <span className="text-gray-400 w-14">Phone</span>
-                      <span>{shop.contact_details}</span>
-                    </div>
-                  )}
-                  {(shop.city || shop.state) && (
-                    <div className="flex gap-2">
-                      <span className="text-gray-400 w-14">Location</span>
-                      <span>{[shop.city, shop.state].filter(Boolean).join(', ')}</span>
-                    </div>
-                  )}
-                  <div className="flex gap-2 pt-1 border-t border-gray-100 mt-2">
-                    <span className="text-gray-400 w-14">Assigned</span>
-                    <span>{fmtDate(a.start_date)}</span>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setSelectedStore(shop)
-                    setActiveTab('details')
-                  }}
-                  className="mt-4 w-full py-1.5 border border-indigo-600 text-indigo-600 hover:bg-indigo-50 font-medium text-xs rounded transition-colors"
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {paginatedAssignments.map((a) => {
+              const shop = a.Shop || {}
+              const isActive = !a.end_date
+              return (
+                <div
+                  key={a.id}
+                  className={`bg-white rounded-lg border p-5 ${
+                    isActive ? 'border-gray-200' : 'border-gray-100 opacity-70'
+                  }`}
                 >
-                  View Store Details
-                </button>
-              </div>
-            )
-          })}
-        </div>
+                  <div className="flex items-start justify-between mb-3">
+                    <div>
+                      <h3 className="font-semibold text-gray-900 text-sm">
+                        {shop.shop_name || `Store #${a.shop_id}`}
+                      </h3>
+                      <p className="text-xs text-gray-500 mt-0.5">{shop.owner_name || '—'}</p>
+                    </div>
+                    <span
+                      className={`px-2 py-0.5 rounded-full text-xs font-medium ${
+                        isActive
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}
+                    >
+                      {isActive ? 'Active' : 'Ended'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1.5 text-xs text-gray-600">
+                    {shop.contact_details && (
+                      <div className="flex gap-2">
+                        <span className="text-gray-400 w-14">Phone</span>
+                        <span>{shop.contact_details}</span>
+                      </div>
+                    )}
+                    {(shop.city || shop.state) && (
+                      <div className="flex gap-2">
+                        <span className="text-gray-400 w-14">Location</span>
+                        <span>{[shop.city, shop.state].filter(Boolean).join(', ')}</span>
+                      </div>
+                    )}
+                    <div className="flex gap-2 pt-1 border-t border-gray-100 mt-2">
+                      <span className="text-gray-400 w-14">Assigned</span>
+                      <span>{fmtDate(a.start_date)}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setSelectedStore(shop)
+                      setActiveTab('details')
+                    }}
+                    className="mt-4 w-full py-1.5 border border-indigo-600 text-indigo-600 hover:bg-indigo-50 font-medium text-xs rounded transition-colors"
+                  >
+                    View Store Details
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+
+          <Pagination
+            current={page}
+            totalPages={totalPages}
+            totalItems={visible.length}
+            onPageChange={setPage}
+          />
+        </>
       )}
 
       {/* Store Details Modal */}

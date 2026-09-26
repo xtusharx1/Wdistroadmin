@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { getUser } from '../../auth'
 import { getUsers, createUser, activateUser, deactivateUser, resetPassword, updateUser } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
-import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Field } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Field, Pagination } from '../../components/DesignSystem'
 
 const ROLES = ['Admin', 'Sales Executive']
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
@@ -16,6 +16,12 @@ export default function UserManagement() {
   const [msg, setMsg] = useState(null)
   const [roleFilter, setRoleFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 15
+
+  useEffect(() => {
+    setPage(1)
+  }, [roleFilter, search])
 
   const [createOpen, setCreateOpen] = useState(false)
   const [editUser, setEditUser] = useState(null)
@@ -48,6 +54,9 @@ export default function UserManagement() {
       (u.phone || '').toLowerCase().includes(q)
     )
   })
+
+  const totalPages = Math.ceil(visible.length / PAGE_SIZE)
+  const paginatedUsers = visible.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const handleOpenCreate = () => {
     setEditUser(null)
@@ -174,39 +183,46 @@ export default function UserManagement() {
         headers={['S.No', 'Name', 'Email', 'Phone', 'Role', 'Status', 'Created', 'Actions']}
         empty={visible.length === 0}
       >
-              {visible.map((u, index) => (
-                <tr key={u.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
-                  <td className="px-4 py-3 font-medium text-gray-900">
-                    {u.name}
-                    {u.id === me.id && (
-                      <span className="ml-1.5 text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">You</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-600">{u.email}</td>
-                  <td className="px-4 py-3 text-gray-500">{u.phone || '—'}</td>
-                  <td className="px-4 py-3 text-gray-600">{u.role}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge status={u.is_active} type="user" />
-                  </td>
-                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(u.created_at)}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1.5 flex-wrap">
-                      <Button variant="warning" onClick={() => handleOpenEdit(u)} className="py-0.5 px-2 text-2xs">Edit</Button>
-                      <Button
-                        variant={u.is_active ? 'secondary' : 'success'}
-                        disabled={u.id === me.id}
-                        onClick={() => doToggle(u)}
-                        className="py-0.5 px-2 text-2xs"
-                      >
-                        {u.is_active ? 'Deactivate' : 'Activate'}
-                      </Button>
-                      <Button variant="secondary" onClick={() => { setResetFor(u); setNewPw('') }} className="py-0.5 px-2 text-2xs">Reset PW</Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+        {paginatedUsers.map((u, index) => (
+          <tr key={u.id} className="hover:bg-gray-50">
+            <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * PAGE_SIZE + index + 1}</td>
+            <td className="px-4 py-3 font-medium text-gray-900">
+              {u.name}
+              {u.id === me.id && (
+                <span className="ml-1.5 text-xs text-indigo-600 bg-indigo-50 px-1.5 py-0.5 rounded">You</span>
+              )}
+            </td>
+            <td className="px-4 py-3 text-gray-600">{u.email}</td>
+            <td className="px-4 py-3 text-gray-500">{u.phone || '—'}</td>
+            <td className="px-4 py-3 text-gray-600">{u.role}</td>
+            <td className="px-4 py-3">
+              <StatusBadge status={u.is_active} type="user" />
+            </td>
+            <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(u.created_at)}</td>
+            <td className="px-4 py-3">
+              <div className="flex gap-1.5 flex-wrap">
+                <Button variant="warning" onClick={() => handleOpenEdit(u)} className="py-0.5 px-2 text-2xs">Edit</Button>
+                <Button
+                  variant={u.is_active ? 'secondary' : 'success'}
+                  disabled={u.id === me.id}
+                  onClick={() => doToggle(u)}
+                  className="py-0.5 px-2 text-2xs"
+                >
+                  {u.is_active ? 'Deactivate' : 'Activate'}
+                </Button>
+                <Button variant="secondary" onClick={() => { setResetFor(u); setNewPw('') }} className="py-0.5 px-2 text-2xs">Reset PW</Button>
+              </div>
+            </td>
+          </tr>
+        ))}
       </DataTable>
+
+      <Pagination
+        current={page}
+        totalPages={totalPages}
+        totalItems={visible.length}
+        onPageChange={setPage}
+      />
 
       {/* Create / Edit User Modal */}
       <Modal open={createOpen} onClose={() => setCreateOpen(false)} title={editUser ? 'Edit User' : 'Create User'}>

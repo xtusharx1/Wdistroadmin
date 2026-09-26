@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { getOrders, getInvoice, getShops, regenerateInvoice, addInvoicePayment } from '../../api'
-import { PageLayout, PageHeader, Button, SearchBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, DataTable, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 import StatusBadge from '../../components/StatusBadge'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
@@ -21,6 +21,12 @@ export default function SellerInvoices() {
   const [fetching, setFetching] = useState(false)
   const [settling, setSettling] = useState(false)
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 15
+
+  useEffect(() => {
+    setPage(1)
+  }, [search])
 
   useEffect(() => {
     Promise.all([getOrders(), getShops()]).then(([oRes, sRes]) => {
@@ -78,6 +84,9 @@ export default function SellerInvoices() {
     return String(o.id).includes(q) || invId.includes(q) || invNo.includes(q) || storeName.includes(q)
   })
 
+  const totalPages = Math.ceil(visibleOrders.length / PAGE_SIZE)
+  const paginatedOrders = visibleOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
   return (
@@ -99,26 +108,33 @@ export default function SellerInvoices() {
         headers={['S.No', 'Invoice No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Delivery Date', 'Invoice']}
         empty={visibleOrders.length === 0}
       >
-            {visibleOrders.map((o, index) => (
-              <tr key={o.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
-                <td className="px-4 py-3 font-semibold text-indigo-600 whitespace-nowrap">
-                  {o.Invoice?.id ? `INV-${o.Invoice.id}` : '—'}
-                </td>
-                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">WS-{o.id}</td>
-                <td className="px-4 py-3 text-gray-500">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
-                <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
-                <td className="px-4 py-3 font-medium">{fmt(o.Invoice?.final_amount || o.total_amount)}</td>
-                <td className="px-4 py-3">
-                  <StatusBadge status={o.status} />
-                </td>
-                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(o.delivered_at || o.created_at)}</td>
-                <td className="px-4 py-3">
-                  <Button variant="outlined" disabled={fetching} onClick={() => openInvoice(o)} className="py-0.5 px-2 text-2xs">View Invoice</Button>
-                </td>
-              </tr>
-              ))}
+        {paginatedOrders.map((o, index) => (
+          <tr key={o.id} className="hover:bg-gray-50">
+            <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * PAGE_SIZE + index + 1}</td>
+            <td className="px-4 py-3 font-semibold text-indigo-600 whitespace-nowrap">
+              {o.Invoice?.id ? `INV-${o.Invoice.id}` : '—'}
+            </td>
+            <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">WS-{o.id}</td>
+            <td className="px-4 py-3 text-gray-500">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
+            <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
+            <td className="px-4 py-3 font-medium">{fmt(o.Invoice?.final_amount || o.total_amount)}</td>
+            <td className="px-4 py-3">
+              <StatusBadge status={o.status} />
+            </td>
+            <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(o.delivered_at || o.created_at)}</td>
+            <td className="px-4 py-3">
+              <Button variant="outlined" disabled={fetching} onClick={() => openInvoice(o)} className="py-0.5 px-2 text-2xs">View Invoice</Button>
+            </td>
+          </tr>
+        ))}
       </DataTable>
+
+      <Pagination
+        current={page}
+        totalPages={totalPages}
+        totalItems={visibleOrders.length}
+        onPageChange={setPage}
+      />
 
       <Modal open={!!invoiceModal} onClose={() => setInvoiceModal(null)} title={invoiceModal?.invoice ? `Invoice INV-${invoiceModal.invoice.id}` : 'Invoice'} size="lg">
         {invoiceModal && (

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { getOrders, getShops, getInvoice, getAllPayments, addInvoicePayment } from '../../api'
-import { PageLayout, PageHeader, Button, SearchBar, DataTable } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, DataTable, Pagination } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
@@ -49,6 +49,8 @@ function HistoryTab() {
   const [payments, setPayments] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 15
 
   useEffect(() => {
     getAllPayments()
@@ -56,6 +58,10 @@ function HistoryTab() {
       .catch(() => setPayments([]))
       .finally(() => setLoading(false))
   }, [])
+
+  useEffect(() => {
+    setPage(1)
+  }, [search])
 
   const filtered = useMemo(() => {
     if (!search.trim()) return payments
@@ -71,12 +77,15 @@ function HistoryTab() {
     })
   }, [payments, search])
 
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
+  const paginatedPayments = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   if (loading) return <div className="text-sm text-gray-400 py-8 text-center">Loading…</div>
 
   return (
     <div>
       <div className="flex items-center gap-3 bg-white p-3 border border-gray-200 rounded-xl shadow-2xs mb-4">
-        <p className="text-sm text-gray-500 shrink-0">{payments.length} payment{payments.length !== 1 ? 's' : ''}</p>
+        <p className="text-sm text-gray-500 shrink-0">{filtered.length} payment{filtered.length !== 1 ? 's' : ''}</p>
         <SearchBar
           value={search}
           onChange={(e) => setSearch(e.target.value)}
@@ -88,25 +97,32 @@ function HistoryTab() {
         headers={['#', 'Invoice #', 'Order #', 'Customer', 'Method', 'Amount', 'Ref No', 'Remarks', 'Verified By', 'Date & Time']}
         empty={filtered.length === 0}
       >
-              {filtered.map((p, idx) => (
-                <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-3 py-3 text-gray-400 text-xs">{idx + 1}</td>
-                  <td className="px-3 py-3 font-medium text-gray-900">#{p.invoice_id}</td>
-                  <td className="px-3 py-3 text-gray-700">WS-{p.Invoice?.Order?.id || '—'}</td>
-                  <td className="px-3 py-3 text-gray-700">{p.Invoice?.Order?.Shop?.shop_name || `Shop #${p.Invoice?.Order?.shop_id}` || '—'}</td>
-                  <td className="px-3 py-3">
-                    <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-medium">
-                      {p.payment_method === 'MO' ? 'Money Order' : p.payment_method}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3 font-semibold text-green-700">{fmt(p.payment_amount)}</td>
-                  <td className="px-3 py-3 font-mono text-xs text-gray-500">{p.payment_reference_no || '—'}</td>
-                  <td className="px-3 py-3 text-gray-500 max-w-[140px] truncate">{p.remarks || '—'}</td>
-                  <td className="px-3 py-3 text-gray-600">{p.VerifiedBy?.name || `User #${p.verified_by_user_id}` || '—'}</td>
-                  <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{fmtTime(p.verified_at)}</td>
-                </tr>
-              ))}
+        {paginatedPayments.map((p, idx) => (
+          <tr key={p.id} className="hover:bg-gray-50">
+            <td className="px-3 py-3 text-gray-400 text-xs">{(page - 1) * PAGE_SIZE + idx + 1}</td>
+            <td className="px-3 py-3 font-medium text-gray-900">#{p.invoice_id}</td>
+            <td className="px-3 py-3 text-gray-700">WS-{p.Invoice?.Order?.id || '—'}</td>
+            <td className="px-3 py-3 text-gray-700">{p.Invoice?.Order?.Shop?.shop_name || `Shop #${p.Invoice?.Order?.shop_id}` || '—'}</td>
+            <td className="px-3 py-3">
+              <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-700 text-xs font-medium">
+                {p.payment_method === 'MO' ? 'Money Order' : p.payment_method}
+              </span>
+            </td>
+            <td className="px-3 py-3 font-semibold text-green-700">{fmt(p.payment_amount)}</td>
+            <td className="px-3 py-3 font-mono text-xs text-gray-500">{p.payment_reference_no || '—'}</td>
+            <td className="px-3 py-3 text-gray-500 max-w-[140px] truncate">{p.remarks || '—'}</td>
+            <td className="px-3 py-3 text-gray-600">{p.VerifiedBy?.name || `User #${p.verified_by_user_id}` || '—'}</td>
+            <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{fmtTime(p.verified_at)}</td>
+          </tr>
+        ))}
       </DataTable>
+
+      <Pagination
+        current={page}
+        totalPages={totalPages}
+        totalItems={filtered.length}
+        onPageChange={setPage}
+      />
     </div>
   )
 }

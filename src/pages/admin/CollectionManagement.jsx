@@ -5,13 +5,19 @@ import {
   updateCollection,
   deleteCollection
 } from '../../api'
-import { PageLayout, PageHeader, Button, SearchBar, Dialog as Modal, Field } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, Dialog as Modal, Field, Pagination } from '../../components/DesignSystem'
 
 export default function CollectionManagement() {
   const [collections, setCollections] = useState([])
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(false)
   const [notify, setNotify] = useState(null)
+  const [page, setPage] = useState(1)
+  const PAGE_SIZE = 12
+
+  useEffect(() => {
+    setPage(1)
+  }, [search])
   
   // Modal states
   const [modalOpen, setModalOpen] = useState(false)
@@ -190,7 +196,7 @@ export default function CollectionManagement() {
             No collections found.
           </div>
         ) : (
-          collections.map((coll) => (
+          collections.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((coll) => (
             <div
               key={coll.id}
               className={`bg-white border rounded-xl p-4 shadow-2xs flex items-center justify-between gap-4 transition-all ${
@@ -238,6 +244,13 @@ export default function CollectionManagement() {
           ))
         )}
       </div>
+
+      <Pagination
+        current={page}
+        totalPages={Math.ceil(collections.length / PAGE_SIZE)}
+        totalItems={collections.length}
+        onPageChange={setPage}
+      />
 
       {/* Create / Edit Collection Modal */}
       <Modal
