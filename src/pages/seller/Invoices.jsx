@@ -73,7 +73,9 @@ export default function SellerInvoices() {
     const q = search.toLowerCase().trim()
     if (!q) return true
     const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
-    return String(o.id).includes(q) || storeName.includes(q)
+    const invId = o.Invoice?.id ? String(o.Invoice.id) : ''
+    const invNo = o.Invoice?.id ? `inv-${o.Invoice.id}` : ''
+    return String(o.id).includes(q) || invId.includes(q) || invNo.includes(q) || storeName.includes(q)
   })
 
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
@@ -89,25 +91,28 @@ export default function SellerInvoices() {
         <SearchBar
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Search by order ID or store name..."
+          placeholder="Search by invoice no, order ID, or store name..."
         />
       </div>
 
       <DataTable
-        headers={['S.No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Delivery Date', 'Invoice']}
+        headers={['S.No', 'Invoice No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Delivery Date', 'Invoice']}
         empty={visibleOrders.length === 0}
       >
             {visibleOrders.map((o, index) => (
               <tr key={o.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
-                <td className="px-4 py-3 font-medium text-gray-900">WS-{o.id}</td>
+                <td className="px-4 py-3 font-semibold text-indigo-600 whitespace-nowrap">
+                  {o.Invoice?.id ? `INV-${o.Invoice.id}` : '—'}
+                </td>
+                <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">WS-{o.id}</td>
                 <td className="px-4 py-3 text-gray-500">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
                 <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
-                <td className="px-4 py-3 font-medium">{fmt(o.total_amount)}</td>
+                <td className="px-4 py-3 font-medium">{fmt(o.Invoice?.final_amount || o.total_amount)}</td>
                 <td className="px-4 py-3">
                   <StatusBadge status={o.status} />
                 </td>
-                <td className="px-4 py-3 text-gray-500">{fmtDate(o.delivered_at || o.created_at)}</td>
+                <td className="px-4 py-3 text-gray-500 whitespace-nowrap">{fmtDate(o.delivered_at || o.created_at)}</td>
                 <td className="px-4 py-3">
                   <Button variant="outlined" disabled={fetching} onClick={() => openInvoice(o)} className="py-0.5 px-2 text-2xs">View Invoice</Button>
                 </td>
@@ -115,7 +120,7 @@ export default function SellerInvoices() {
               ))}
       </DataTable>
 
-      <Modal open={!!invoiceModal} onClose={() => setInvoiceModal(null)} title="Invoice" size="lg">
+      <Modal open={!!invoiceModal} onClose={() => setInvoiceModal(null)} title={invoiceModal?.invoice ? `Invoice INV-${invoiceModal.invoice.id}` : 'Invoice'} size="lg">
         {invoiceModal && (
           <InvoiceView
             order={invoiceModal.order}

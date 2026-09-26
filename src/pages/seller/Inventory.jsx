@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getProducts, updateStock, getDashboardStats } from '../../api'
-import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Pagination } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 
@@ -200,13 +200,12 @@ export default function Inventory() {
             )}
       </DataTable>
 
-      {pagination.totalPages > 1 && (
-        <div className="px-4 py-3 bg-gray-50 border border-gray-200 rounded-b-xl flex items-center justify-between mt-0.5">
-          <Button variant="secondary" onClick={() => loadProducts(pagination.page - 1)} disabled={pagination.page === 1 || loading} className="py-1 px-3 text-xs">Previous</Button>
-          <div className="text-xs font-medium text-gray-700">Page {pagination.page} of {pagination.totalPages}</div>
-          <Button variant="secondary" onClick={() => loadProducts(pagination.page + 1)} disabled={pagination.page === pagination.totalPages || loading} className="py-1 px-3 text-xs">Next</Button>
-        </div>
-      )}
+      <Pagination
+        current={pagination.page}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.total}
+        onPageChange={(p) => loadProducts(p)}
+      />
     </PageLayout>
   )
 }

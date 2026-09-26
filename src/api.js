@@ -45,6 +45,8 @@ export const getShops = () => http.get('/shops')
 export const approveShop = (id, data) => http.patch(`/shops/${id}/approve`, data)
 export const rejectShop = (id) => http.patch(`/shops/${id}/reject`)
 export const updateShop = (id, data) => http.patch(`/shops/${id}`, data)
+export const deleteShop = (id) => http.delete(`/shops/${id}`)
+
 
 // ── Products ────────────────────────────────────────────────────────────────
 export const getProducts = (params) => http.get('/products', { params })
@@ -72,6 +74,7 @@ export const downloadImportTemplate = () =>
 
 // ── Orders ──────────────────────────────────────────────────────────────────
 export const getOrders = () => http.get('/orders')
+export const createOrder = (data) => http.post('/orders', data)
 export const processOrder = (id, items) =>
   http.patch(`/orders/${id}/process`, { items })
 export const updateOrderStatus = (id, status) =>
@@ -79,6 +82,8 @@ export const updateOrderStatus = (id, status) =>
 export const editOrder = (id, items) =>
   http.put(`/orders/${id}/edit`, { items })
 export const getOrderLogs = (orderId) => http.get(`/orders/${orderId}/logs`)
+export const deleteOrder = (id) => http.delete(`/orders/${id}`)
+
 
 // ── Invoices ────────────────────────────────────────────────────────────────
 export const getInvoice = (orderId) => http.get(`/invoices/${orderId}`)
@@ -91,6 +96,13 @@ export const getAllPayments = (params) => http.get('/invoices/payments', { param
 // ── Permits ─────────────────────────────────────────────────────────────────
 export const getShopPermits = (shopId) => http.get(`/permits/shop/${shopId}`)
 export const reviewPermit = (id, data) => http.patch(`/permits/${id}/review`, data)
+export const uploadShopPermit = (shopId, permitTypeSlug, formData) =>
+  http.post(`/permits/upload?permit_type=${permitTypeSlug}`, formData, {
+    headers: {
+      'Content-Type': 'multipart/form-data',
+      'x-shop-id': shopId,
+    },
+  })
 
 // ── Variation Groups ────────────────────────────────────────────────────────
 export const getVariationGroups = () => http.get('/variation-groups')
@@ -98,6 +110,8 @@ export const getVariationGroup = (id) => http.get(`/variation-groups/${id}`)
 export const createVariationGroup = (data) => http.post('/variation-groups', data)
 export const updateVariationGroup = (id, data) => http.patch(`/variation-groups/${id}`, data)
 export const deleteVariationGroup = (id) => http.delete(`/variation-groups/${id}`)
+export const bulkUpdateVariations = (data) => http.patch('/products/bulk-update', data)
+export const bulkUpdateGroupVariations = (groupId, data) => http.patch(`/variation-groups/${groupId}/bulk-update`, data)
 
 // ── Sales ───────────────────────────────────────────────────────────────────
 export const getSalesAssignments = () => http.get('/sales/shops')

@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getProducts, createProduct, bulkCreateProducts, updateProduct, deleteProduct, uploadImage, getCategories, getCollections, importProducts, downloadImportTemplate } from '../../api'
 import { getUser } from '../../auth'
-import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
+import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Pagination, Dialog as Modal } from '../../components/DesignSystem'
 import * as XLSX from 'xlsx'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
@@ -608,13 +608,12 @@ export default function Products() {
       </div>
 
       {/* Pagination */}
-      {pagination.totalPages > 1 && (
-        <div className="flex items-center justify-center gap-3 mt-4 text-sm">
-          <Button variant="secondary" onClick={() => load(pagination.page - 1)} disabled={pagination.page === 1} className="py-1 px-3">Previous</Button>
-          <span className="text-gray-500">Page {pagination.page} of {pagination.totalPages}</span>
-          <Button variant="secondary" onClick={() => load(pagination.page + 1)} disabled={pagination.page === pagination.totalPages} className="py-1 px-3">Next</Button>
-        </div>
-      )}
+      <Pagination
+        current={pagination.page}
+        totalPages={pagination.totalPages}
+        totalItems={pagination.total}
+        onPageChange={(p) => load(p)}
+      />
 
       {/* Create / Edit Modal */}
       <Modal

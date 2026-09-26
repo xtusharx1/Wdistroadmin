@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getOrders, processOrder, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, getShops, editOrder, getProducts } from '../../api'
+import { getOrders, processOrder, updateOrderStatus, deleteOrder, getInvoice, generateInvoice, regenerateInvoice, getShops, editOrder, getProducts } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
 
-const FILTERS = ['All', 'pending', 'approved', 'dispatched', 'delivered']
+const FILTERS = ['All', 'pending', 'approved', 'dispatched', 'delivered', 'rejected', 'cancelled']
 const EDITABLE_STATUSES = ['pending', 'approved', 'processed']
 
 export default function SellerOrders() {
@@ -33,6 +33,10 @@ export default function SellerOrders() {
   const [addSelected, setAddSelected] = useState(null)
   const [addQty, setAddQty] = useState(1)
   const [addPrice, setAddPrice] = useState('')
+
+  // Delete rejected order state
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const notify = (text, type = 'success') => {
     setMsg({ text, type })
@@ -317,6 +321,24 @@ export default function SellerOrders() {
     }
   }
 
+  const handleDeleteOrder = async () => {
+    if (!deleteConfirmOrder) return
+    setDeleting(true)
+    try {
+      await deleteOrder(deleteConfirmOrder.id)
+      setOrders((prev) => prev.filter((o) => o.id !== deleteConfirmOrder.id))
+      if (detailModal?.id === deleteConfirmOrder.id) {
+        setDetailModal(null)
+      }
+      setDeleteConfirmOrder(null)
+      notify('Rejected order permanently deleted.')
+    } catch (err) {
+      notify(err.response?.data?.message || 'Failed to delete order.', 'error')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
 
   const visible = (
@@ -391,11 +413,33 @@ export default function SellerOrders() {
                 <td className="px-4 py-3">
                   <div className="flex gap-1.5 flex-wrap">
                     {o.status === 'pending' && (
+                      <>
+                        <button
+                          onClick={() => openProcess(o)}
+                          className="text-xs px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => doStatusUpdate(o, 'rejected', 'Rejected')}
+                          disabled={acting === o.id}
+                          className="text-xs px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium transition-colors border border-rose-200 disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+                    {o.status === 'rejected' && (
                       <button
-                        onClick={() => openProcess(o)}
-                        className="text-xs px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium transition-colors"
+                        onClick={() => setDeleteConfirmOrder(o)}
+                        disabled={acting === o.id || deleting}
+                        className="text-xs px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-medium transition-colors disabled:opacity-50 flex items-center gap-1 shadow-sm"
+                        title="Permanently delete this rejected order"
                       >
-                        Approve
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete Order
                       </button>
                     )}
                     {o.status === 'approved' && (
@@ -559,6 +603,22 @@ export default function SellerOrders() {
               </tbody>
             </table>
             </div>
+
+            {detailModal.status === 'rejected' && (
+              <div className="mt-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-red-900">Rejected Order</h4>
+                  <p className="text-xs text-red-600 mt-0.5">This order has been rejected and can be permanently deleted.</p>
+                </div>
+                <Button
+                  variant="danger"
+                  onClick={() => setDeleteConfirmOrder(detailModal)}
+                  className="text-xs"
+                >
+                  Delete Order
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </Modal>
@@ -840,6 +900,67 @@ export default function SellerOrders() {
               >
                 Cancel
               </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Delete Rejected Order Confirmation Dialog */}
+      <Modal
+        open={!!deleteConfirmOrder}
+        onClose={() => !deleting && setDeleteConfirmOrder(null)}
+        title="Delete Rejected Order"
+        size="sm"
+      >
+        {deleteConfirmOrder && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-3 bg-red-50 rounded-xl border border-red-100">
+              <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-red-900">Permanent Deletion</h4>
+                <p className="text-xs text-red-700 mt-1">
+                  Are you sure you want to permanently delete this rejected order (<strong>WS-{deleteConfirmOrder.id}</strong>)?
+                </p>
+                <p className="text-2xs text-red-600 mt-1 font-semibold">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg space-y-1">
+              <div className="flex justify-between">
+                <span>Store:</span>
+                <span className="font-medium text-gray-800">{storeMap[deleteConfirmOrder.shop_id] || `Store #${deleteConfirmOrder.shop_id}`}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Amount:</span>
+                <span className="font-medium text-gray-800">{fmt(deleteConfirmOrder.total_amount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Status:</span>
+                <span className="font-semibold text-rose-600 uppercase text-3xs">Rejected</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <Button
+                variant="secondary"
+                disabled={deleting}
+                onClick={() => setDeleteConfirmOrder(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                disabled={deleting}
+                onClick={handleDeleteOrder}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </Button>
             </div>
           </div>
         )}

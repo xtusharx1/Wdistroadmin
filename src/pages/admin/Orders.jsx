@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getOrders, getShops, updateOrderStatus, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment, editOrder, getProducts, getOrderLogs } from '../../api'
+import { getOrders, getShops, updateOrderStatus, deleteOrder, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment, editOrder, getProducts, getOrderLogs, createOrder } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal } from '../../components/DesignSystem'
 
@@ -7,7 +7,7 @@ const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
 const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
 
-const STATUSES = ['pending', 'approved', 'dispatched', 'delivered']
+const STATUSES = ['pending', 'approved', 'dispatched', 'delivered', 'rejected', 'cancelled']
 const FILTERS = ['All', ...STATUSES]
 
 const NEXT_STATUS = {
@@ -41,6 +41,7 @@ const fmtLogVal = (action, val) => {
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState([])
+  const [shopsList, setShopsList] = useState([])
   const [storeMap, setStoreMap] = useState({})
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
@@ -64,6 +65,23 @@ export default function AdminOrders() {
   const [settleRemarks, setSettleRemarks] = useState('')
   const [payments, setPayments] = useState([])
 
+  // Delete rejected order state
+  const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null)
+  const [deleting, setDeleting] = useState(false)
+
+  // Create Manual Order state
+  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [createSelectedShop, setCreateSelectedShop] = useState(null)
+  const [shopFilterSearch, setShopFilterSearch] = useState('')
+  const [createItems, setCreateItems] = useState([])
+  const [createProductSearch, setCreateProductSearch] = useState('')
+  const [createProductResults, setCreateProductResults] = useState([])
+  const [createProductSearching, setCreateProductSearching] = useState(false)
+  const [createOrderStatus, setCreateOrderStatus] = useState('approved')
+  const [creatingOrder, setCreatingOrder] = useState(false)
+  const [createError, setCreateError] = useState(null)
+  const createDebounceRef = useRef(null)
+
   const notify = (text, type = 'success') => {
     setMsg({ text, type })
     setTimeout(() => setMsg(null), 3000)
@@ -73,6 +91,7 @@ export default function AdminOrders() {
     Promise.all([getOrders(), getShops()]).then(([oRes, sRes]) => {
       setOrders(oRes.data.data.orders || [])
       const stores = sRes.data.data.shops || []
+      setShopsList(stores)
       setStoreMap(stores.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {}))
     }).finally(() => setLoading(false))
   }, [])
@@ -203,6 +222,136 @@ export default function AdminOrders() {
     }, 350)
     return () => clearTimeout(editDebounceRef.current)
   }, [editSearch, editModal])
+
+  const openCreateModal = () => {
+    setCreateSelectedShop(null)
+    setShopFilterSearch('')
+    setCreateItems([])
+    setCreateProductSearch('')
+    setCreateProductResults([])
+    setCreateOrderStatus('approved')
+    setCreateError(null)
+    setShowCreateModal(true)
+  }
+
+  // Debounced product search for create manual order modal
+  useEffect(() => {
+    if (!showCreateModal) return
+    clearTimeout(createDebounceRef.current)
+    if (!createProductSearch.trim()) {
+      setCreateProductResults([])
+      return
+    }
+    createDebounceRef.current = setTimeout(async () => {
+      setCreateProductSearching(true)
+      try {
+        const res = await getProducts({ search: createProductSearch, limit: 20, page: 1 })
+        setCreateProductResults(res.data.data.products || [])
+      } catch {
+        setCreateProductResults([])
+      } finally {
+        setCreateProductSearching(false)
+      }
+    }, 350)
+    return () => clearTimeout(createDebounceRef.current)
+  }, [createProductSearch, showCreateModal])
+
+  const handleCreateAddItem = (product) => {
+    setCreateItems((prev) => {
+      const existing = prev.find((i) => i.product_id === product.id)
+      const effectivePrice = (product.deal_price !== null && product.deal_price !== undefined && product.deal_price > 0)
+        ? product.deal_price
+        : product.price
+      if (existing) {
+        if (existing.quantity >= product.stock_quantity) {
+          notify(`Cannot exceed available stock (${product.stock_quantity})`, 'error')
+          return prev
+        }
+        return prev.map((i) =>
+          i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i
+        )
+      }
+      return [
+        ...prev,
+        {
+          product_id: product.id,
+          name: product.name,
+          sku_id: product.sku_id,
+          unit: product.unit || '',
+          price: product.price,
+          deal_price: product.deal_price,
+          effective_price: effectivePrice,
+          stock_quantity: product.stock_quantity,
+          image_url: product.image_url,
+          quantity: 1,
+        },
+      ]
+    })
+  }
+
+  const handleCreateQtyChange = (productId, val) => {
+    const qty = parseInt(val, 10)
+    if (isNaN(qty)) return
+    setCreateItems((prev) =>
+      prev.map((i) => {
+        if (i.product_id === productId) {
+          const clamped = Math.max(1, Math.min(qty, i.stock_quantity))
+          return { ...i, quantity: clamped }
+        }
+        return i
+      })
+    )
+  }
+
+  const handleCreateRemoveItem = (productId) => {
+    setCreateItems((prev) => prev.filter((i) => i.product_id !== productId))
+  }
+
+  const submitCreateOrder = async () => {
+    if (!createSelectedShop) {
+      setCreateError('Please select a store.')
+      return
+    }
+    if (createItems.length === 0) {
+      setCreateError('Please add at least one product to the order.')
+      return
+    }
+
+    for (const item of createItems) {
+      if (!item.quantity || item.quantity <= 0) {
+        setCreateError(`Quantity for "${item.name}" must be at least 1.`)
+        return
+      }
+      if (item.quantity > item.stock_quantity) {
+        setCreateError(`Quantity for "${item.name}" exceeds available stock (${item.stock_quantity}).`)
+        return
+      }
+    }
+
+    setCreatingOrder(true)
+    setCreateError(null)
+
+    try {
+      const payload = {
+        shop_id: createSelectedShop.id,
+        items: createItems.map((item) => ({
+          product_id: item.product_id,
+          requested_qty: item.quantity,
+        })),
+        status: createOrderStatus,
+        source: 'Admin',
+      }
+      const res = await createOrder(payload)
+      const orderId = res.data?.data?.order?.id
+      notify(`Order WS-${orderId || ''} created successfully!`)
+      setShowCreateModal(false)
+      refresh()
+    } catch (err) {
+      setCreateError(err.response?.data?.message || 'Failed to create order. Please check inputs.')
+    } finally {
+      setCreatingOrder(false)
+    }
+  }
 
   const refresh = () => {
     getOrders().then((res) => setOrders(res.data.data.orders || []))
@@ -339,7 +488,8 @@ export default function AdminOrders() {
   }
 
   const doStatusUpdate = async (order, status) => {
-    if (!confirm(`Update order WS-${order.id} to "${status}"?`)) return
+    const actionWord = status === 'rejected' ? 'reject' : `update to "${status}"`
+    if (!confirm(`Are you sure you want to ${actionWord} order WS-${order.id}?`)) return
     setUpdating(order.id)
     try {
       await updateOrderStatus(order.id, status)
@@ -347,11 +497,29 @@ export default function AdminOrders() {
         prev.map((o) => (o.id === order.id ? { ...o, status } : o))
       )
       if (detail?.id === order.id) setDetail((d) => ({ ...d, status }))
-      notify('Order status updated.')
+      notify(`Order marked as ${status}.`)
     } catch (err) {
       notify(err.response?.data?.message || 'Update failed.', 'error')
     } finally {
       setUpdating(null)
+    }
+  }
+
+  const handleDeleteOrder = async () => {
+    if (!deleteConfirmOrder) return
+    setDeleting(true)
+    try {
+      await deleteOrder(deleteConfirmOrder.id)
+      setOrders((prev) => prev.filter((o) => o.id !== deleteConfirmOrder.id))
+      if (detail?.id === deleteConfirmOrder.id) {
+        setDetail(null)
+      }
+      setDeleteConfirmOrder(null)
+      notify('Rejected order permanently deleted.')
+    } catch (err) {
+      notify(err.response?.data?.message || 'Failed to delete order.', 'error')
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -376,6 +544,18 @@ export default function AdminOrders() {
       <PageHeader
         title="Orders"
         subtitle={`${orders.filter(o => o.status === 'pending').length} pending orders`}
+        action={
+          <Button
+            variant="primary"
+            onClick={openCreateModal}
+            className="flex items-center gap-1.5 shadow-sm"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" />
+            </svg>
+            + Create Order
+          </Button>
+        }
       />
 
       <TableToolbar>
@@ -406,12 +586,19 @@ export default function AdminOrders() {
               <tr key={o.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-gray-500 font-medium">{index + 1}</td>
                 <td className="px-4 py-3 font-medium text-gray-900">
-                  <button
-                    onClick={() => setDetail(o)}
-                    className="text-indigo-600 hover:underline"
-                  >
-                    WS-{o.id}
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      onClick={() => setDetail(o)}
+                      className="text-indigo-600 hover:underline font-semibold"
+                    >
+                      WS-{o.id}
+                    </button>
+                    {o.source === 'Admin' && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-3xs font-semibold bg-purple-50 text-purple-700 border border-purple-200" title="Manual / Admin Created">
+                        Manual
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-gray-700">
                   {storeMap[o.shop_id] || `Store #${o.shop_id}`}
@@ -435,12 +622,34 @@ export default function AdminOrders() {
                         disabled={updating === o.id}
                         className={`text-xs px-2.5 py-1 rounded font-medium disabled:opacity-50 transition-colors ${ns === 'approved' ? 'bg-indigo-600 hover:bg-indigo-700 text-white' :
                             ns === 'dispatched' ? 'bg-purple-600 hover:bg-purple-700 text-white' :
-                              'bg-green-600 hover:bg-green-700 text-white'
+                               'bg-green-600 hover:bg-green-700 text-white'
                           }`}
                       >
                         {ns === 'approved' ? 'Approve' : ns === 'dispatched' ? 'Dispatch' : 'Mark Delivered'}
                       </button>
                     ))}
+                    {o.status === 'pending' && (
+                      <button
+                        onClick={() => doStatusUpdate(o, 'rejected')}
+                        disabled={updating === o.id}
+                        className="text-xs px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium transition-colors border border-rose-200 disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    )}
+                    {o.status === 'rejected' && (
+                      <button
+                        onClick={() => setDeleteConfirmOrder(o)}
+                        disabled={updating === o.id || deleting}
+                        className="text-xs px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-medium transition-colors disabled:opacity-50 flex items-center gap-1 shadow-sm"
+                        title="Permanently delete this rejected order"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete Order
+                      </button>
+                    )}
                     {EDITABLE_STATUSES.includes(o.status) && (
                       <button
                         onClick={() => openEdit(o)}
@@ -457,8 +666,8 @@ export default function AdminOrders() {
                         Invoice
                       </button>
                     )}
-            </div>
-          </td>
+                  </div>
+                </td>
         </tr>
       ))}
       </DataTable>
@@ -550,6 +759,18 @@ export default function AdminOrders() {
               <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Store</p>
                 <p className="font-medium">{storeMap[detail.shop_id] || `Store #${detail.shop_id}`}</p>
+              </div>
+              <div>
+                <p className="text-gray-400 text-xs uppercase tracking-wide">Order Source</p>
+                <p className="font-medium text-xs mt-0.5">
+                  {detail.source === 'Admin' ? (
+                    <span className="inline-flex items-center px-2 py-0.5 rounded font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+                      Manual / Admin Created
+                    </span>
+                  ) : (
+                    <span className="text-gray-700 font-medium">Mobile App</span>
+                  )}
+                </p>
               </div>
               <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Status</p>
@@ -817,6 +1038,22 @@ export default function AdminOrders() {
               </tbody>
             </table>
             </div>
+
+            {detail.status === 'rejected' && (
+              <div className="mt-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-semibold text-red-900">Rejected Order</h4>
+                  <p className="text-xs text-red-600 mt-0.5">This order has been rejected and can be permanently deleted.</p>
+                </div>
+                <Button
+                  variant="danger"
+                  onClick={() => setDeleteConfirmOrder(detail)}
+                  className="text-xs"
+                >
+                  Delete Order
+                </Button>
+              </div>
+            )}
             </div>}
           </div>
         )}
@@ -1097,6 +1334,531 @@ export default function AdminOrders() {
             </div>
           </div>
         )}
+      </Modal>
+
+      {/* Delete Rejected Order Confirmation Dialog */}
+      <Modal
+        open={!!deleteConfirmOrder}
+        onClose={() => !deleting && setDeleteConfirmOrder(null)}
+        title="Delete Rejected Order"
+        size="sm"
+      >
+        {deleteConfirmOrder && (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-3 bg-red-50 rounded-xl border border-red-100">
+              <div className="w-9 h-9 rounded-full bg-red-100 text-red-600 flex items-center justify-center shrink-0 mt-0.5">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                </svg>
+              </div>
+              <div>
+                <h4 className="text-sm font-bold text-red-900">Permanent Deletion</h4>
+                <p className="text-xs text-red-700 mt-1">
+                  Are you sure you want to permanently delete this rejected order (<strong>WS-{deleteConfirmOrder.id}</strong>)?
+                </p>
+                <p className="text-2xs text-red-600 mt-1 font-semibold">
+                  This action cannot be undone.
+                </p>
+              </div>
+            </div>
+
+            <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded-lg space-y-1">
+              <div className="flex justify-between">
+                <span>Store:</span>
+                <span className="font-medium text-gray-800">{storeMap[deleteConfirmOrder.shop_id] || `Store #${deleteConfirmOrder.shop_id}`}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total Amount:</span>
+                <span className="font-medium text-gray-800">{fmt(deleteConfirmOrder.total_amount)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Status:</span>
+                <span className="font-semibold text-rose-600 uppercase text-3xs">Rejected</span>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+              <Button
+                variant="secondary"
+                disabled={deleting}
+                onClick={() => setDeleteConfirmOrder(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                disabled={deleting}
+                onClick={handleDeleteOrder}
+              >
+                {deleting ? 'Deleting…' : 'Delete'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* Create Manual Order Modal */}
+      <Modal
+        open={showCreateModal}
+        onClose={() => !creatingOrder && setShowCreateModal(false)}
+        title="Create Manual Order"
+        size="xl"
+      >
+        <div className="space-y-6">
+          {createError && (
+            <div className="flex items-start gap-2.5 px-3.5 py-2.5 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700">
+              <svg className="w-4 h-4 mt-0.5 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <div className="flex-1 font-medium">{createError}</div>
+            </div>
+          )}
+
+          {/* Step 1: Shop Selection */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-extrabold">1</span>
+                Select Existing Store <span className="text-red-500">*</span>
+              </label>
+              {createSelectedShop && (
+                <button
+                  type="button"
+                  onClick={() => setCreateSelectedShop(null)}
+                  className="text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors hover:underline"
+                >
+                  Change Store
+                </button>
+              )}
+            </div>
+
+            {createSelectedShop ? (
+              <div className="p-3.5 bg-indigo-50/60 border border-indigo-200 rounded-xl flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-bold text-sm shrink-0 shadow-sm">
+                    {createSelectedShop.shop_name?.charAt(0)?.toUpperCase() || 'S'}
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h4 className="text-sm font-bold text-gray-900 truncate">{createSelectedShop.shop_name}</h4>
+                      <StatusBadge status={createSelectedShop.approved ? 'approved' : 'pending'} />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                      <span>Owner: <strong className="text-gray-700">{createSelectedShop.owner_name || '—'}</strong></span>
+                      <span>·</span>
+                      <span>{createSelectedShop.email || '—'}</span>
+                      {createSelectedShop.city && (
+                        <>
+                          <span>·</span>
+                          <span>{createSelectedShop.city}{createSelectedShop.state ? `, ${createSelectedShop.state}` : ''}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCreateSelectedShop(null)}
+                  className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 rounded-lg shadow-2xs transition-colors shrink-0"
+                >
+                  Change
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={shopFilterSearch}
+                    onChange={(e) => setShopFilterSearch(e.target.value)}
+                    placeholder="Search existing store by name, email, owner, or city..."
+                    className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  />
+                  <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+
+                <div className="border border-gray-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto divide-y divide-gray-100 bg-white">
+                  {shopsList
+                    .filter((s) => {
+                      if (!shopFilterSearch.trim()) return true
+                      const q = shopFilterSearch.toLowerCase()
+                      return (
+                        (s.shop_name && s.shop_name.toLowerCase().includes(q)) ||
+                        (s.owner_name && s.owner_name.toLowerCase().includes(q)) ||
+                        (s.email && s.email.toLowerCase().includes(q)) ||
+                        (s.city && s.city.toLowerCase().includes(q)) ||
+                        (s.contact_number && s.contact_number.includes(q)) ||
+                        String(s.id).includes(q)
+                      )
+                    })
+                    .slice(0, 30)
+                    .map((shop) => (
+                      <div
+                        key={shop.id}
+                        className="p-3 hover:bg-indigo-50/40 flex items-center justify-between gap-3 transition-colors cursor-pointer"
+                        onClick={() => setCreateSelectedShop(shop)}
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm text-gray-900 truncate">{shop.shop_name}</span>
+                            <span className="text-2xs text-gray-400">ID: {shop.id}</span>
+                            <span className={`text-3xs px-1.5 py-0.5 rounded font-semibold uppercase ${shop.approved ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                              {shop.approved ? 'Approved' : 'Pending'}
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5 truncate">
+                            {shop.owner_name && <span>{shop.owner_name} · </span>}
+                            {shop.email && <span>{shop.email} · </span>}
+                            {shop.city && <span>{shop.city}{shop.state ? `, ${shop.state}` : ''}</span>}
+                          </p>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          className="text-xs py-1 px-3 shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setCreateSelectedShop(shop)
+                          }}
+                        >
+                          Select
+                        </Button>
+                      </div>
+                    ))}
+                  {shopsList.length === 0 && (
+                    <div className="p-6 text-center text-sm text-gray-400">
+                      No stores found.
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Step 2: Add Products & Variations */}
+          <div>
+            <label className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+              <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-extrabold">2</span>
+              Add Products & Variations
+            </label>
+
+            <div className="relative">
+              <input
+                type="text"
+                placeholder="Search products by name, SKU, or category to add…"
+                value={createProductSearch}
+                onChange={(e) => setCreateProductSearch(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg pl-9 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              />
+              <svg className="w-4 h-4 text-gray-400 absolute left-3 top-3 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+
+            {createProductSearch.trim() && (
+              <div className="mt-2 border border-gray-200 rounded-xl divide-y divide-gray-100 max-h-56 overflow-y-auto bg-white shadow-md">
+                {createProductSearching ? (
+                  <p className="text-center text-sm text-gray-400 py-6">Searching products…</p>
+                ) : createProductResults.length === 0 ? (
+                  <p className="text-center text-sm text-gray-400 py-6">No products found matching "{createProductSearch}".</p>
+                ) : (
+                  createProductResults.map((product) => {
+                    const alreadyIn = createItems.find((i) => i.product_id === product.id)
+                    const isOutOfStock = product.stock_quantity <= 0
+                    const isMaxStockAdded = alreadyIn && alreadyIn.quantity >= product.stock_quantity
+                    const hasDeal = product.deal_price !== null && product.deal_price !== undefined && product.deal_price > 0
+                    const effectivePrice = hasDeal ? product.deal_price : product.price
+
+                    return (
+                      <div key={product.id} className="flex items-center gap-3 px-3.5 py-2.5 hover:bg-gray-50 transition-colors">
+                        {product.image_url ? (
+                          <img src={product.image_url} alt="" className="w-10 h-10 rounded-lg object-contain border border-gray-100 bg-white shrink-0" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center shrink-0">
+                            <span className="text-xs font-bold text-indigo-500">{product.name?.charAt(0)?.toUpperCase()}</span>
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{product.name}</p>
+                            {product.sku_id && (
+                              <span className="text-3xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-mono">
+                                {product.sku_id}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5 text-xs text-gray-500">
+                            {hasDeal ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-green-600">{fmt(effectivePrice)}</span>
+                                <span className="text-gray-400 line-through text-2xs">{fmt(product.price)}</span>
+                                <span className="text-3xs px-1 py-0.5 rounded bg-green-50 text-green-700 font-semibold">Deal</span>
+                              </div>
+                            ) : (
+                              <span className="font-semibold text-gray-700">{fmt(product.price)}</span>
+                            )}
+                            <span>·</span>
+                            <span className={
+                              isOutOfStock ? 'text-red-500 font-semibold' :
+                              product.stock_quantity < 10 ? 'text-amber-500 font-medium' : 'text-gray-500'
+                            }>
+                              {isOutOfStock ? 'Out of stock' : `${product.stock_quantity} available`}
+                            </span>
+                            {product.sub_category && (
+                              <>
+                                <span>·</span>
+                                <span className="text-gray-400">{product.sub_category}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleCreateAddItem(product)}
+                          disabled={isOutOfStock || isMaxStockAdded}
+                          className={`text-xs px-3.5 py-1.5 rounded-lg font-semibold transition-all shrink-0 shadow-2xs ${
+                            isOutOfStock || isMaxStockAdded
+                              ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                              : alreadyIn
+                                ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-200'
+                                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          }`}
+                        >
+                          {isOutOfStock ? 'Out of Stock' : isMaxStockAdded ? 'Max Added' : alreadyIn ? `+1 (In Cart: ${alreadyIn.quantity})` : 'Add to Order'}
+                        </button>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Step 3: Selected Items in Order */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+                <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-xs font-extrabold">3</span>
+                Order Items ({createItems.length})
+              </label>
+              {createItems.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setCreateItems([])}
+                  className="text-xs text-red-500 hover:text-red-700 transition-colors"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+
+            {createItems.length === 0 ? (
+              <div className="text-center py-8 border-2 border-dashed border-gray-200 rounded-xl bg-gray-50/50">
+                <svg className="w-8 h-8 mx-auto text-gray-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+                </svg>
+                <p className="text-sm font-medium text-gray-600">No items added to this order yet</p>
+                <p className="text-xs text-gray-400 mt-0.5">Use the search box above to find and add products</p>
+              </div>
+            ) : (
+              <div className="border border-gray-200 rounded-xl overflow-hidden overflow-x-auto shadow-2xs">
+                <table className="w-full text-sm min-w-[540px]">
+                  <thead className="bg-gray-50/80 border-b border-gray-200">
+                    <tr>
+                      {['Product', 'Unit Price', 'Available', 'Quantity', 'Subtotal', ''].map((h) => (
+                        <th key={h} className="px-3 py-2.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider whitespace-nowrap">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100 bg-white">
+                    {createItems.map((item) => (
+                      <tr key={item.product_id} className="hover:bg-gray-50/60 transition-colors">
+                        <td className="px-3 py-2.5 font-medium text-gray-900">
+                          <div className="flex items-center gap-2">
+                            {item.image_url ? (
+                              <img src={item.image_url} alt="" className="w-8 h-8 rounded object-contain border border-gray-100 shrink-0" />
+                            ) : null}
+                            <div>
+                              <p className="text-sm font-semibold text-gray-900">{item.name}</p>
+                              <div className="flex items-center gap-1.5 text-2xs text-gray-400">
+                                {item.sku_id && <span>SKU: {item.sku_id}</span>}
+                                {item.unit && <span>· {item.unit}</span>}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 text-gray-700">
+                          {item.deal_price !== null && item.deal_price !== undefined && item.deal_price > 0 ? (
+                            <div>
+                              <span className="font-bold text-green-600">{fmt(item.effective_price)}</span>
+                              <span className="text-2xs text-gray-400 line-through ml-1">{fmt(item.price)}</span>
+                            </div>
+                          ) : (
+                            <span className="font-semibold">{fmt(item.price)}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span className={`text-xs font-semibold ${
+                            item.stock_quantity === 0 ? 'text-red-500' :
+                            item.stock_quantity < 10 ? 'text-amber-500' : 'text-gray-500'
+                          }`}>
+                            {item.stock_quantity}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => setCreateItems((prev) =>
+                                prev.map((i) => i.product_id === item.product_id ? { ...i, quantity: Math.max(1, i.quantity - 1) } : i)
+                              )}
+                              className="w-7 h-7 flex items-center justify-center border border-gray-300 rounded-md text-gray-600 hover:bg-gray-100 transition-colors font-bold shadow-2xs"
+                            >−</button>
+                            <input
+                              type="number"
+                              min="1"
+                              max={item.stock_quantity}
+                              value={item.quantity}
+                              onChange={(e) => handleCreateQtyChange(item.product_id, e.target.value)}
+                              className="w-14 text-center border border-gray-300 rounded-md px-1 py-1 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setCreateItems((prev) =>
+                                prev.map((i) => i.product_id === item.product_id ? { ...i, quantity: Math.min(item.stock_quantity, i.quantity + 1) } : i)
+                              )}
+                              disabled={item.quantity >= item.stock_quantity}
+                              className="w-7 h-7 flex items-center justify-center border border-gray-300 rounded-md text-gray-600 hover:bg-gray-100 transition-colors font-bold shadow-2xs disabled:opacity-40"
+                            >+</button>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2.5 font-bold text-gray-900">{fmt(item.effective_price * item.quantity)}</td>
+                        <td className="px-3 py-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleCreateRemoveItem(item.product_id)}
+                            className="p-1 text-gray-400 hover:text-red-600 transition-colors rounded hover:bg-red-50"
+                            title="Remove item"
+                          >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Step 4: Order Status Flow & Totals */}
+          <div className="bg-gray-50/80 border border-gray-200 rounded-xl p-4 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-bold text-gray-700 uppercase tracking-wider block mb-1.5">
+                  Initial Order Status
+                </label>
+                <div className="space-y-2">
+                  <label className={`flex items-start gap-2.5 p-2.5 border rounded-lg cursor-pointer transition-all ${
+                    createOrderStatus === 'approved' ? 'bg-indigo-50/70 border-indigo-300 ring-1 ring-indigo-300' : 'bg-white border-gray-200'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="orderStatus"
+                      value="approved"
+                      checked={createOrderStatus === 'approved'}
+                      onChange={() => setCreateOrderStatus('approved')}
+                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-gray-900">Approved</span>
+                        <span className="text-3xs px-1.5 py-0.5 rounded bg-indigo-100 text-indigo-700 font-bold uppercase">Recommended</span>
+                      </div>
+                      <p className="text-2xs text-gray-500 mt-0.5">Deducts stock immediately and generates standard Invoice PDF.</p>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-2.5 p-2.5 border rounded-lg cursor-pointer transition-all ${
+                    createOrderStatus === 'pending' ? 'bg-indigo-50/70 border-indigo-300 ring-1 ring-indigo-300' : 'bg-white border-gray-200'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="orderStatus"
+                      value="pending"
+                      checked={createOrderStatus === 'pending'}
+                      onChange={() => setCreateOrderStatus('pending')}
+                      className="mt-0.5 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <div>
+                      <span className="text-xs font-bold text-gray-900">Pending</span>
+                      <p className="text-2xs text-gray-500 mt-0.5">Creates a pending order for review before approving/dispatching.</p>
+                    </div>
+                  </label>
+                </div>
+              </div>
+
+              {/* Order Calculation Review */}
+              <div className="flex flex-col justify-between bg-white border border-gray-200 rounded-lg p-3.5">
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-gray-500">
+                    <span>Store:</span>
+                    <span className="font-semibold text-gray-800">{createSelectedShop?.shop_name || 'None selected'}</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500">
+                    <span>Total Line Items:</span>
+                    <span className="font-semibold text-gray-800">{createItems.length} items</span>
+                  </div>
+                  <div className="flex justify-between text-gray-500">
+                    <span>Total Units:</span>
+                    <span className="font-semibold text-gray-800">
+                      {createItems.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0)} units
+                    </span>
+                  </div>
+                </div>
+
+                <div className="pt-3 border-t border-gray-100 flex items-center justify-between mt-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-600">Calculated Total</span>
+                  <span className="text-xl font-extrabold text-indigo-700">
+                    {fmt(createItems.reduce((sum, item) => sum + item.effective_price * item.quantity, 0))}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Modal Footer */}
+          <div className="flex items-center justify-end gap-3 pt-3 border-t border-gray-200">
+            <Button
+              variant="secondary"
+              disabled={creatingOrder}
+              onClick={() => setShowCreateModal(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              disabled={creatingOrder || !createSelectedShop || createItems.length === 0}
+              onClick={submitCreateOrder}
+              className="flex items-center gap-1.5 shadow-sm min-w-[140px] justify-center"
+            >
+              {creatingOrder ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Creating…
+                </>
+              ) : (
+                'Create Order'
+              )}
+            </Button>
+          </div>
+        </div>
       </Modal>
     </PageLayout>
   )
