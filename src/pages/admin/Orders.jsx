@@ -1480,8 +1480,9 @@ export default function AdminOrders() {
                 </div>
 
                 <div className="border border-gray-200 rounded-xl overflow-hidden max-h-52 overflow-y-auto divide-y divide-gray-100 bg-white">
-                  {shopsList
-                    .filter((s) => {
+                  {(() => {
+                    const approvedShops = shopsList.filter((s) => s.approved)
+                    const filtered = approvedShops.filter((s) => {
                       if (!shopFilterSearch.trim()) return true
                       const q = shopFilterSearch.toLowerCase()
                       return (
@@ -1493,8 +1494,18 @@ export default function AdminOrders() {
                         String(s.id).includes(q)
                       )
                     })
-                    .slice(0, 30)
-                    .map((shop) => (
+
+                    if (filtered.length === 0) {
+                      return (
+                        <div className="p-6 text-center text-sm text-gray-400">
+                          {approvedShops.length === 0
+                            ? 'No approved stores found.'
+                            : `No approved stores found matching "${shopFilterSearch}".`}
+                        </div>
+                      )
+                    }
+
+                    return filtered.slice(0, 30).map((shop) => (
                       <div
                         key={shop.id}
                         className="p-3 hover:bg-indigo-50/40 flex items-center justify-between gap-3 transition-colors cursor-pointer"
@@ -1504,8 +1515,8 @@ export default function AdminOrders() {
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-sm text-gray-900 truncate">{shop.shop_name}</span>
                             <span className="text-2xs text-gray-400">ID: {shop.id}</span>
-                            <span className={`text-3xs px-1.5 py-0.5 rounded font-semibold uppercase ${shop.approved ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                              {shop.approved ? 'Approved' : 'Pending'}
+                            <span className="text-3xs px-1.5 py-0.5 rounded font-semibold uppercase bg-green-50 text-green-700 border border-green-200">
+                              Approved
                             </span>
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5 truncate">
@@ -1525,12 +1536,8 @@ export default function AdminOrders() {
                           Select
                         </Button>
                       </div>
-                    ))}
-                  {shopsList.length === 0 && (
-                    <div className="p-6 text-center text-sm text-gray-400">
-                      No stores found.
-                    </div>
-                  )}
+                    ))
+                  })()}
                 </div>
               </div>
             )}
