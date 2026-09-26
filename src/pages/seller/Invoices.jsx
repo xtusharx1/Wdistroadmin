@@ -25,11 +25,11 @@ export default function SellerInvoices() {
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
-  const PAGE_SIZE = 15
+  const [pageSize, setPageSize] = useState(10)
 
   useEffect(() => {
     setPage(1)
-  }, [filter, search])
+  }, [filter, search, pageSize])
 
   useEffect(() => {
     Promise.all([getOrders(), getShops()]).then(([oRes, sRes]) => {
@@ -97,8 +97,8 @@ export default function SellerInvoices() {
     return String(o.id).includes(q) || invId.includes(q) || invNo.includes(q) || storeName.includes(q)
   })
 
-  const totalPages = Math.ceil(visibleOrders.length / PAGE_SIZE)
-  const paginatedOrders = visibleOrders.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const totalPages = Math.ceil(visibleOrders.length / pageSize)
+  const paginatedOrders = visibleOrders.slice((page - 1) * pageSize, page * pageSize)
 
   if (loading) return <div className="p-4 sm:p-6 text-sm text-gray-400">Loading…</div>
 
@@ -135,7 +135,7 @@ export default function SellerInvoices() {
       >
         {paginatedOrders.map((o, index) => (
           <tr key={o.id} className="hover:bg-gray-50">
-            <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * PAGE_SIZE + index + 1}</td>
+            <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * pageSize + index + 1}</td>
             <td className="px-4 py-3 font-semibold text-indigo-600 whitespace-nowrap">
               {o.Invoice?.id ? `INV-${o.Invoice.id}` : '—'}
             </td>
@@ -159,6 +159,9 @@ export default function SellerInvoices() {
         totalPages={totalPages}
         totalItems={visibleOrders.length}
         onPageChange={setPage}
+        pageSize={pageSize}
+        onPageSizeChange={setPageSize}
+        pageSizeOptions={[5, 10, 15, 25, 50]}
       />
 
       <Modal open={!!invoiceModal} onClose={() => setInvoiceModal(null)} title={invoiceModal?.invoice ? `Invoice INV-${invoiceModal.invoice.id}` : 'Invoice'} size="lg">

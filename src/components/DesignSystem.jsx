@@ -180,19 +180,21 @@ export function DataTable({ headers = [], children, empty, loading }) {
 }
 
 // Pagination controls with direct page jump, first/last buttons, and page pills
-export function Pagination({ current, totalPages, totalItems, onPageChange, className = '' }) {
+export function Pagination({ current, totalPages, totalItems, onPageChange, pageSize, onPageSizeChange, pageSizeOptions = [10, 15, 25, 50], className = '' }) {
   const [inputVal, setInputVal] = React.useState('')
 
   React.useEffect(() => {
     setInputVal('')
   }, [current, totalPages])
 
-  if (totalPages <= 1) return null
+  if (!totalItems && totalPages <= 0) return null
+
+  const safeTotalPages = Math.max(1, totalPages || 1)
 
   const handleJump = (e) => {
     if (e) e.preventDefault()
     const pageNum = parseInt(inputVal, 10)
-    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= totalPages) {
+    if (!isNaN(pageNum) && pageNum >= 1 && pageNum <= safeTotalPages) {
       onPageChange(pageNum)
       setInputVal('')
     }
@@ -205,8 +207,8 @@ export function Pagination({ current, totalPages, totalItems, onPageChange, clas
     const rangeWithDots = []
     let l
 
-    for (let i = 1; i <= totalPages; i++) {
-      if (i === 1 || i === totalPages || (i >= current - delta && i <= current + delta)) {
+    for (let i = 1; i <= safeTotalPages; i++) {
+      if (i === 1 || i === safeTotalPages || (i >= current - delta && i <= current + delta)) {
         range.push(i)
       }
     }
@@ -228,12 +230,28 @@ export function Pagination({ current, totalPages, totalItems, onPageChange, clas
 
   return (
     <div className={`flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pt-4 border-t border-gray-200 mt-3 text-xs ${className}`}>
-      <div className="flex items-center gap-2 text-gray-500 font-medium">
+      <div className="flex flex-wrap items-center gap-3 text-gray-500 font-medium">
         <span>
-          Page <strong className="text-gray-900">{current}</strong> of <strong className="text-gray-900">{totalPages}</strong>
+          Page <strong className="text-gray-900">{current}</strong> of <strong className="text-gray-900">{safeTotalPages}</strong>
         </span>
         {totalItems != null && (
-          <span className="text-gray-400">({totalItems.toLocaleString()} total items)</span>
+          <span className="text-gray-400">({totalItems.toLocaleString()} total item{totalItems !== 1 ? 's' : ''})</span>
+        )}
+        {onPageSizeChange && (
+          <div className="flex items-center gap-1.5 ml-2">
+            <span className="text-gray-400">Show:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => onPageSizeChange(Number(e.target.value))}
+              className="border border-gray-300 rounded px-1.5 py-0.5 text-xs font-semibold bg-white text-gray-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+            >
+              {pageSizeOptions.map((opt) => (
+                <option key={opt} value={opt}>
+                  {opt} / page
+                </option>
+              ))}
+            </select>
+          </div>
         )}
       </div>
 
@@ -251,7 +269,7 @@ export function Pagination({ current, totalPages, totalItems, onPageChange, clas
           </Button>
 
           {/* Number pills */}
-          <div className="hidden md:flex items-center gap-1">
+          <div className="flex items-center gap-1">
             {getPageNumbers().map((p, idx) => {
               if (p === '...') {
                 return (
@@ -281,7 +299,7 @@ export function Pagination({ current, totalPages, totalItems, onPageChange, clas
           <Button
             variant="secondary"
             className="py-1 px-2.5 text-xs"
-            disabled={current >= totalPages}
+            disabled={current >= safeTotalPages}
             onClick={() => onPageChange(current + 1)}
             title="Next Page"
           >
@@ -290,26 +308,28 @@ export function Pagination({ current, totalPages, totalItems, onPageChange, clas
         </div>
 
         {/* Manual Go to Page input form */}
-        <form onSubmit={handleJump} className="flex items-center gap-1.5 ml-1">
-          <span className="text-gray-500 font-medium">Go to:</span>
-          <input
-            type="number"
-            min="1"
-            max={totalPages}
-            value={inputVal}
-            onChange={(e) => setInputVal(e.target.value)}
-            placeholder={String(current)}
-            className="w-14 h-7 text-center border border-gray-300 rounded-md text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
-          />
-          <Button
-            type="submit"
-            variant="primary"
-            className="py-1 px-2 h-7 text-xs font-medium"
-            disabled={!inputVal || parseInt(inputVal, 10) < 1 || parseInt(inputVal, 10) > totalPages}
-          >
-            Go
-          </Button>
-        </form>
+        {safeTotalPages > 1 && (
+          <form onSubmit={handleJump} className="flex items-center gap-1.5 ml-1">
+            <span className="text-gray-500 font-medium">Go to:</span>
+            <input
+              type="number"
+              min="1"
+              max={safeTotalPages}
+              value={inputVal}
+              onChange={(e) => setInputVal(e.target.value)}
+              placeholder={String(current)}
+              className="w-14 h-7 text-center border border-gray-300 rounded-md text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <Button
+              type="submit"
+              variant="primary"
+              className="py-1 px-2 h-7 text-xs font-medium"
+              disabled={!inputVal || parseInt(inputVal, 10) < 1 || parseInt(inputVal, 10) > safeTotalPages}
+            >
+              Go
+            </Button>
+          </form>
+        )}
       </div>
     </div>
   )
