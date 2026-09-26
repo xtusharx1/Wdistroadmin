@@ -6,7 +6,7 @@ import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, Dat
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
 
-const FILTERS = ['All', 'pending', 'approved', 'dispatched', 'delivered', 'rejected', 'cancelled']
+const FILTERS = ['All', 'pending', 'approved', 'dispatched', 'delivered', 'Cancelled / Rejected']
 const EDITABLE_STATUSES = ['pending', 'approved', 'processed']
 
 export default function SellerOrders() {
@@ -341,9 +341,12 @@ export default function SellerOrders() {
 
   const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
 
-  const visible = (
-    filter === 'All' ? orders : orders.filter((o) => o.status === filter)
-  ).filter((o) => {
+  const visible = orders.filter((o) => {
+    if (filter === 'Cancelled / Rejected') {
+      if (o.status !== 'cancelled' && o.status !== 'rejected') return false
+    } else if (filter !== 'All' && o.status !== filter) {
+      return false
+    }
     const q = search.toLowerCase().trim()
     if (!q) return true
     const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
@@ -429,12 +432,12 @@ export default function SellerOrders() {
                         </button>
                       </>
                     )}
-                    {o.status === 'rejected' && (
+                    {(o.status === 'rejected' || o.status === 'cancelled') && (
                       <button
                         onClick={() => setDeleteConfirmOrder(o)}
                         disabled={acting === o.id || deleting}
                         className="text-xs px-2.5 py-1 rounded bg-red-600 hover:bg-red-700 text-white font-medium transition-colors disabled:opacity-50 flex items-center gap-1 shadow-sm"
-                        title="Permanently delete this rejected order"
+                        title={`Permanently delete this ${o.status} order`}
                       >
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -604,11 +607,11 @@ export default function SellerOrders() {
             </table>
             </div>
 
-            {detailModal.status === 'rejected' && (
+            {(detailModal.status === 'rejected' || detailModal.status === 'cancelled') && (
               <div className="mt-5 p-4 bg-red-50 border border-red-200 rounded-xl flex items-center justify-between">
                 <div>
-                  <h4 className="text-sm font-semibold text-red-900">Rejected Order</h4>
-                  <p className="text-xs text-red-600 mt-0.5">This order has been rejected and can be permanently deleted.</p>
+                  <h4 className="text-sm font-semibold text-red-900 capitalize">{detailModal.status} Order</h4>
+                  <p className="text-xs text-red-600 mt-0.5">This order has been {detailModal.status} and can be permanently deleted.</p>
                 </div>
                 <Button
                   variant="danger"
@@ -923,7 +926,7 @@ export default function SellerOrders() {
               <div>
                 <h4 className="text-sm font-bold text-red-900">Permanent Deletion</h4>
                 <p className="text-xs text-red-700 mt-1">
-                  Are you sure you want to permanently delete this rejected order (<strong>WS-{deleteConfirmOrder.id}</strong>)?
+                  Are you sure you want to permanently delete this {deleteConfirmOrder.status} order (<strong>WS-{deleteConfirmOrder.id}</strong>)?
                 </p>
                 <p className="text-2xs text-red-600 mt-1 font-semibold">
                   This action cannot be undone.
@@ -942,7 +945,7 @@ export default function SellerOrders() {
               </div>
               <div className="flex justify-between">
                 <span>Status:</span>
-                <span className="font-semibold text-rose-600 uppercase text-3xs">Rejected</span>
+                <span className="font-semibold text-rose-600 uppercase text-3xs">{deleteConfirmOrder.status}</span>
               </div>
             </div>
 
