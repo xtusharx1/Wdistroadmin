@@ -641,7 +641,7 @@ export default function AdminOrders() {
                         Reject
                       </button>
                     )}
-                    {(o.status === 'rejected' || o.status === 'cancelled') && (
+                    {filter === 'Cancelled / Rejected' && (o.status === 'rejected' || o.status === 'cancelled') && (
                       <button
                         onClick={() => setDeleteConfirmOrder(o)}
                         disabled={updating === o.id || deleting}

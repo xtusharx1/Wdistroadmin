@@ -432,7 +432,7 @@ export default function SellerOrders() {
                         </button>
                       </>
                     )}
-                    {(o.status === 'rejected' || o.status === 'cancelled') && (
+                    {filter === 'Cancelled / Rejected' && (o.status === 'rejected' || o.status === 'cancelled') && (
                       <button
                         onClick={() => setDeleteConfirmOrder(o)}
                         disabled={acting === o.id || deleting}

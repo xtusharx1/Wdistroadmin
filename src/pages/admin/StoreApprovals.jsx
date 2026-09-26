@@ -358,7 +358,7 @@ export default function StoreApprovals() {
                 >
                   Reset PW
                 </button>
-                {s.approval_status === 'Rejected' && (
+                {filter === 'Rejected' && s.approval_status === 'Rejected' && (
                   <button
                     onClick={() => setDeleteStoreTarget(s)}
                     disabled={acting === s.id}
