@@ -343,7 +343,7 @@ function RecordTab() {
             <div className="border border-gray-200 rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="text-xs text-gray-400 uppercase tracking-wide">Invoice #{invoice.id}</p>
+                  <p className="text-xs text-gray-400 uppercase tracking-wide">Invoice #{selectedOrder.id}</p>
                   <p className="font-semibold text-gray-900 mt-0.5">Order WS-{selectedOrder.id}</p>
                   <p className="text-xs text-gray-500">{storeMap[selectedOrder.shop_id] || `Store #${selectedOrder.shop_id}`}</p>
                 </div>

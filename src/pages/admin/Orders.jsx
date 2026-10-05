@@ -271,7 +271,7 @@ export default function AdminOrders() {
           i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i
         )
       }
-      return [
+      const updated = [
         ...prev,
         {
           product_id: product.id,
@@ -286,6 +286,7 @@ export default function AdminOrders() {
           quantity: 1,
         },
       ]
+      return updated.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
     })
   }
 
@@ -364,9 +365,10 @@ export default function AdminOrders() {
         name: item.Product?.name || `Product #${item.product_id}`,
         unit: item.Product?.unit || '',
         price: item.price,
+        custom_price: item.custom_price != null ? String(item.custom_price) : '',
         stock_quantity: item.Product?.stock_quantity ?? 0,
         quantity: order.status === 'pending' ? item.requested_qty : (item.approved_qty ?? item.requested_qty),
-      }))
+      })).sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
     )
     setEditSearch('')
     setEditSearchResults([])
@@ -382,17 +384,19 @@ export default function AdminOrders() {
           i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i
         )
       }
-      return [
+      const updated = [
         ...prev,
         {
           product_id: product.id,
           name: product.name,
           unit: product.unit || '',
           price: product.price,
+          custom_price: '',
           stock_quantity: product.stock_quantity,
           quantity: 1,
         },
       ]
+      return updated.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
     })
   }
 
@@ -414,7 +418,11 @@ export default function AdminOrders() {
     try {
       await editOrder(
         editModal.id,
-        editItems.map(({ product_id, quantity }) => ({ product_id, quantity }))
+        editItems.map(({ product_id, quantity, custom_price }) => ({
+          product_id,
+          quantity,
+          custom_price: custom_price !== '' && !isNaN(parseFloat(custom_price)) ? parseFloat(custom_price) : null,
+        }))
       )
       notify('Order updated successfully.')
       setEditModal(null)
@@ -838,7 +846,7 @@ export default function AdminOrders() {
                   </h4>
                   <p className="text-xs text-gray-500 mt-1">
                     {loadingInvoice ? 'Checking invoice status...' :
-                      invoice ? `Invoice #${invoice.id} · ` : 'No invoice generated for this order yet.'}
+                      invoice ? `Invoice #${detail.id} · ` : 'No invoice generated for this order yet.'}
                     {invoice && (() => {
                       const s = invoice.payment_status
                       const isPaid = s === 'paid' || s === 'settled'
@@ -1031,7 +1039,7 @@ export default function AdminOrders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {(detail.OrderItems || []).map((item) => {
+                {[...(detail.OrderItems || [])].sort((a, b) => (a.Product?.name || '').localeCompare(b.Product?.name || '', undefined, { sensitivity: 'base' })).map((item) => {
                   const qty = detail.status === 'pending' ? item.requested_qty : (item.approved_qty ?? item.requested_qty)
                   const itemPrice = item.custom_price !== null && item.custom_price !== undefined ? item.custom_price : item.price
                   return (
@@ -1089,7 +1097,10 @@ export default function AdminOrders() {
         size="xl"
       >
         {editModal && (() => {
-          const editTotal = editItems.reduce((sum, item) => sum + item.price * item.quantity, 0)
+          const editTotal = editItems.reduce((sum, item) => {
+            const effectivePrice = item.custom_price !== '' && !isNaN(parseFloat(item.custom_price)) ? parseFloat(item.custom_price) : item.price
+            return sum + effectivePrice * item.quantity
+          }, 0)
           return (
             <div className="space-y-5">
               {editError && (
@@ -1115,7 +1126,7 @@ export default function AdminOrders() {
                     <table className="w-full text-sm min-w-[520px]">
                       <thead className="bg-gray-50 border-b border-gray-200">
                         <tr>
-                          {['Product', 'Unit Price', 'Stock', 'Quantity', 'Subtotal', ''].map((h) => (
+                          {['Product', 'Unit Price', 'Custom Price', 'Stock', 'Quantity', 'Subtotal', ''].map((h) => (
                             <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                           ))}
                         </tr>
@@ -1128,6 +1139,17 @@ export default function AdminOrders() {
                               {item.unit && <span className="ml-1 text-xs text-gray-400">/ {item.unit}</span>}
                             </td>
                             <td className="px-3 py-2.5 text-gray-600">{fmt(item.price)}</td>
+                            <td className="px-3 py-2.5">
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                placeholder="—"
+                                value={item.custom_price}
+                                onChange={(e) => setEditItems((prev) => prev.map((i) => i.product_id === item.product_id ? { ...i, custom_price: e.target.value } : i))}
+                                className="w-20 border border-gray-300 rounded-md px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 text-center"
+                              />
+                            </td>
                             <td className="px-3 py-2.5">
                               <span className={`text-xs font-medium ${
                                 item.stock_quantity === 0 ? 'text-red-500' :
@@ -1159,7 +1181,7 @@ export default function AdminOrders() {
                                 >+</button>
                               </div>
                             </td>
-                            <td className="px-3 py-2.5 font-semibold text-gray-900">{fmt(item.price * item.quantity)}</td>
+                            <td className="px-3 py-2.5 font-semibold text-gray-900">{fmt((item.custom_price !== '' && !isNaN(parseFloat(item.custom_price)) ? parseFloat(item.custom_price) : item.price) * item.quantity)}</td>
                             <td className="px-3 py-2.5">
                               <button
                                 onClick={() => setEditItems((prev) => prev.filter((i) => i.product_id !== item.product_id))}

@@ -407,7 +407,7 @@ export default function AssignedStores() {
                         const inv = o.Invoice
                         return (
                           <tr key={inv.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-2.5 font-medium text-gray-900">INV-{inv.id}</td>
+                            <td className="px-4 py-2.5 font-medium text-gray-900">INV-{o.id}</td>
                             <td className="px-4 py-2.5 text-indigo-600">WS-{o.id}</td>
                             <td className="px-4 py-2.5 font-semibold text-gray-900">{fmt(inv.final_amount)}</td>
                             <td className="px-4 py-2.5 text-gray-500">{fmtDate(inv.generated_at)}</td>

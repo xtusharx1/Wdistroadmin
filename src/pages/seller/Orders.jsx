@@ -132,7 +132,7 @@ export default function SellerOrders() {
         custom_price: item.custom_price || '',
         requested_qty: item.requested_qty,
         approved_qty: item.requested_qty,
-      })),
+      })).sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })),
     })
   }
 
@@ -149,7 +149,7 @@ export default function SellerOrders() {
         product_stock: item.Product?.stock_quantity ?? 0,
         quantity: order.status === 'pending' ? item.requested_qty : (item.approved_qty || item.requested_qty),
         custom_price: item.custom_price != null ? String(item.custom_price) : ''
-      }))
+      })).sort((a, b) => (a.product_name || '').localeCompare(b.product_name || '', undefined, { sensitivity: 'base' }))
     })
     setAddSearch('')
     setAddResults([])
@@ -217,7 +217,7 @@ export default function SellerOrders() {
         product_stock: addSelected.stock_quantity ?? 0,
         quantity: qty,
         custom_price: addPrice
-      }]
+      }].sort((a, b) => (a.product_name || '').localeCompare(b.product_name || '', undefined, { sensitivity: 'base' }))
     }))
     setAddSelected(null)
     setAddSearch('')
@@ -539,7 +539,7 @@ export default function SellerOrders() {
                 </h4>
                 <p className="text-xs text-gray-500 mt-1">
                   {loadingInvoice ? 'Checking invoice status...' :
-                   invoice ? `Invoice #${invoice.id} generated on ${new Date(invoice.generated_at).toLocaleDateString('en-IN')}` :
+                   invoice ? `Invoice #${detailModal.id} generated on ${new Date(invoice.generated_at).toLocaleDateString('en-IN')}` :
                    'No invoice generated for this order yet.'}
                 </p>
               </div>
@@ -595,7 +595,7 @@ export default function SellerOrders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {(detailModal.OrderItems || []).map((item) => {
+                {[...(detailModal.OrderItems || [])].sort((a, b) => (a.Product?.name || '').localeCompare(b.Product?.name || '', undefined, { sensitivity: 'base' })).map((item) => {
                   const qty = detailModal.status === 'pending' ? item.requested_qty : (item.approved_qty ?? item.requested_qty)
                   const itemPrice = item.custom_price !== null && item.custom_price !== undefined ? item.custom_price : item.price
                   return (

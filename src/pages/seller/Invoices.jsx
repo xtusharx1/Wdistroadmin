@@ -93,7 +93,7 @@ export default function SellerInvoices() {
     if (!q) return true
     const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
     const invId = o.Invoice?.id ? String(o.Invoice.id) : ''
-    const invNo = o.Invoice?.id ? `inv-${o.Invoice.id}` : ''
+    const invNo = o.Invoice?.id ? `inv-${o.id}` : ''
     return String(o.id).includes(q) || invId.includes(q) || invNo.includes(q) || storeName.includes(q)
   })
 
@@ -137,7 +137,7 @@ export default function SellerInvoices() {
           <tr key={o.id} className="hover:bg-gray-50">
             <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * pageSize + index + 1}</td>
             <td className="px-4 py-3 font-semibold text-indigo-600 whitespace-nowrap">
-              {o.Invoice?.id ? `INV-${o.Invoice.id}` : '—'}
+              {o.Invoice?.id ? `INV-${o.id}` : '—'}
             </td>
             <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">WS-{o.id}</td>
             <td className="px-4 py-3 text-gray-500">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
@@ -164,7 +164,7 @@ export default function SellerInvoices() {
         pageSizeOptions={[5, 10, 15, 25, 50]}
       />
 
-      <Modal open={!!invoiceModal} onClose={() => setInvoiceModal(null)} title={invoiceModal?.invoice ? `Invoice INV-${invoiceModal.invoice.id}` : 'Invoice'} size="lg">
+      <Modal open={!!invoiceModal} onClose={() => setInvoiceModal(null)} title={invoiceModal?.invoice ? `Invoice INV-${invoiceModal.order.id}` : 'Invoice'} size="lg">
         {invoiceModal && (
           <InvoiceView
             order={invoiceModal.order}
@@ -215,7 +215,7 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onA
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
         <div>
-          <p className="text-xs text-gray-400 uppercase tracking-wide">Invoice #{invoice.id}</p>
+          <p className="text-xs text-gray-400 uppercase tracking-wide">Invoice #{order.id}</p>
           <p className="text-sm text-gray-500 mt-0.5">Generated: {new Date(invoice.generated_at).toLocaleString('en-US')}</p>
           <span className={`inline-flex items-center mt-1.5 text-xs px-2.5 py-0.5 rounded-full font-medium border ${badge.cls}`}>
             {badge.label}

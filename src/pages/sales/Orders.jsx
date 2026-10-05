@@ -174,7 +174,7 @@ export default function SalesOrders() {
         custom_price: item.custom_price || '',
         requested_qty: item.requested_qty,
         approved_qty: item.requested_qty,
-      })),
+      })).sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })),
     })
   }
 
@@ -385,7 +385,7 @@ export default function SalesOrders() {
                     </h4>
                     <p className="text-xs text-gray-500 mt-1">
                       {loadingInvoice ? 'Checking invoice status...' :
-                        invoice ? `Invoice #${invoice.id} · ` : 'No invoice generated for this order yet.'}
+                        invoice ? `Invoice #${detail.id} · ` : 'No invoice generated for this order yet.'}
                       {invoice && (() => {
                         const s = invoice.payment_status
                         const isPaid = s === 'paid' || s === 'settled'
@@ -577,7 +577,7 @@ export default function SalesOrders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {(detail.OrderItems || []).map((item) => {
+                {[...(detail.OrderItems || [])].sort((a, b) => (a.Product?.name || '').localeCompare(b.Product?.name || '', undefined, { sensitivity: 'base' })).map((item) => {
                   const qty = item.approved_qty ?? item.requested_qty
                   const itemPrice = item.custom_price !== null && item.custom_price !== undefined ? item.custom_price : item.price
                   return (
