@@ -8,6 +8,7 @@ import {
 } from '../../api'
 import Modal from '../../components/Modal'
 import { PageLayout, PageHeader, Button, SearchBar, DataTable, Dialog, Pagination } from '../../components/DesignSystem'
+import { fmtTime as fmtDate } from '../../utils/date'
 
 export default function InventoryReceiving() {
   const [activeTab, setActiveTab] = useState('history')
@@ -209,17 +210,7 @@ export default function InventoryReceiving() {
     }
   }
 
-  // Helper formats
-  const fmtDate = (dStr) => {
-    if (!dStr) return '—'
-    return new Date(dStr).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
-  }
+
 
   return (
     <PageLayout>

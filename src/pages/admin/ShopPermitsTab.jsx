@@ -3,7 +3,7 @@ import { getShopPermits, reviewPermit, uploadShopPermit } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import { Button } from '../../components/DesignSystem'
 
-const fmtDate = (d) => (d ? new Date(d).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' }) : '—')
+import { fmtTime as fmtDate } from '../../utils/date'
 
 const PERMIT_CONFIG = {
   'Seller Permit': { icon: '📄', slug: 'seller_permit' },

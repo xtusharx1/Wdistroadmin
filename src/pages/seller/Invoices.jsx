@@ -3,9 +3,9 @@ import { getOrders, getInvoice, getShops, regenerateInvoice, addInvoicePayment }
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 import StatusBadge from '../../components/StatusBadge'
 
+import { fmtDate, fmtTime } from '../../utils/date'
+
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
-const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
 
 const PAYMENT_FILTERS = ['All', 'Unsettled', 'Partially Paid', 'Paid']
 
@@ -94,7 +94,9 @@ export default function SellerInvoices() {
     const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
     const invId = o.Invoice?.id ? String(o.Invoice.id) : ''
     const invNo = o.Invoice?.id ? `inv-${o.id}` : ''
-    return String(o.id).includes(q) || invId.includes(q) || invNo.includes(q) || storeName.includes(q)
+    const orderDate = fmtDate(o.delivered_at || o.created_at)
+    const matchesDate = orderDate.includes(q) || orderDate.replace(/\//g, '').includes(q.replace(/\//g, ''))
+    return String(o.id).includes(q) || invId.includes(q) || invNo.includes(q) || storeName.includes(q) || matchesDate
   })
 
   const totalPages = Math.ceil(visibleOrders.length / pageSize)
@@ -216,7 +218,7 @@ function InvoiceView({ order, invoice, storeMap, onRegenerate, regenerating, onA
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
         <div>
           <p className="text-xs text-gray-400 uppercase tracking-wide">Invoice #{order.id}</p>
-          <p className="text-sm text-gray-500 mt-0.5">Generated: {new Date(invoice.generated_at).toLocaleString('en-US')}</p>
+          <p className="text-sm text-gray-500 mt-0.5">Generated: {fmtTime(invoice.generated_at)}</p>
           <span className={`inline-flex items-center mt-1.5 text-xs px-2.5 py-0.5 rounded-full font-medium border ${badge.cls}`}>
             {badge.label}
           </span>

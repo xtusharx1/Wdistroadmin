@@ -93,6 +93,14 @@ export const regenerateInvoice = (invoiceId) => http.post(`/invoices/${invoiceId
 export const addInvoicePayment = (invoiceId, data) => http.post(`/invoices/${invoiceId}/payments`, data)
 export const getInvoicePayments = (invoiceId) => http.get(`/invoices/${invoiceId}/payments`)
 export const getAllPayments = (params) => http.get('/invoices/payments', { params })
+export const updatePayment = (paymentId, data) => http.patch(`/invoices/payments/${paymentId}`, data)
+
+// ── Returns & Credit Notes ──────────────────────────────────────────────────
+export const getOrderReturns = (orderId) => http.get(`/returns/order/${orderId}`)
+export const createOrderReturn = (orderId, data) => http.post(`/returns/order/${orderId}`, data)
+export const generateCreditNotePdf = (creditNoteId) => http.post(`/returns/credit-notes/${creditNoteId}/pdf`)
+export const getAvailableCreditNotes = (invoiceId) => http.get(`/invoices/${invoiceId}/available-credit-notes`)
+export const applyCreditNote = (invoiceId, data) => http.post(`/invoices/${invoiceId}/credit-applications`, data)
 
 // ── Permits ─────────────────────────────────────────────────────────────────
 export const getShopPermits = (shopId) => http.get(`/permits/shop/${shopId}`)

@@ -3,8 +3,9 @@ import { getOrders, processOrder, updateOrderStatus, deleteOrder, getInvoice, ge
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 
+import { fmtDate } from '../../utils/date'
+
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
-const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
 
 const FILTERS = ['All', 'pending', 'approved', 'dispatched', 'delivered', 'Cancelled / Rejected']
 const EDITABLE_STATUSES = ['pending', 'approved', 'processed']
@@ -207,13 +208,16 @@ export default function SellerOrders() {
       return
     }
     const qty = Math.max(1, parseInt(addQty) || 1)
+    const hasDeal = addSelected.deal_price !== null && addSelected.deal_price !== undefined && addSelected.deal_price > 0 && (!addSelected.ProductCollection || addSelected.ProductCollection.is_active)
+    const effectivePrice = hasDeal ? addSelected.deal_price : addSelected.price
     setEditModal(prev => ({
       ...prev,
       items: [...prev.items, {
         product_id: addSelected.id,
         product_name: addSelected.name,
         product_sku: addSelected.sku_id || '',
-        product_price: addSelected.price,
+        product_price: effectivePrice,
+        deal_price: addSelected.deal_price,
         product_stock: addSelected.stock_quantity ?? 0,
         quantity: qty,
         custom_price: addPrice
@@ -353,7 +357,8 @@ export default function SellerOrders() {
     const q = search.toLowerCase().trim()
     if (!q) return true
     const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
-    return String(o.id).includes(q) || storeName.includes(q)
+    const matchesDate = fmtDate(o.created_at).includes(q) || fmtDate(o.created_at).replace(/\//g, '').includes(q.replace(/\//g, ''))
+    return String(o.id).includes(q) || storeName.includes(q) || matchesDate
   })
 
   useEffect(() => {
@@ -539,7 +544,7 @@ export default function SellerOrders() {
                 </h4>
                 <p className="text-xs text-gray-500 mt-1">
                   {loadingInvoice ? 'Checking invoice status...' :
-                   invoice ? `Invoice #${detailModal.id} generated on ${new Date(invoice.generated_at).toLocaleDateString('en-IN')}` :
+                   invoice ? `Invoice #${detailModal.id} generated on ${fmtDate(invoice.generated_at)}` :
                    'No invoice generated for this order yet.'}
                 </p>
               </div>

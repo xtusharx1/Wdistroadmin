@@ -3,9 +3,12 @@ import { getOrders, getShops, updateOrderStatus, deleteOrder, getInvoice, genera
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 
+import { fmtDate, fmtTime } from '../../utils/date'
+import { invoiceBalance } from '../../utils/invoice'
+import { ReturnItemsModal, ReturnsHistory } from './OrderReturns'
+import ApplyCreditNote from './ApplyCreditNote'
+
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
-const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
-const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
 
 const STATUSES = ['pending', 'approved', 'dispatched', 'delivered']
 const FILTERS = ['All', ...STATUSES, 'Cancelled / Rejected']
@@ -16,7 +19,8 @@ const NEXT_STATUS = {
   dispatched: ['delivered'],
 }
 
-const EDITABLE_STATUSES = ['pending', 'approved']
+const EDITABLE_STATUSES = ['pending', 'approved', 'dispatched']
+const RETURNABLE_STATUSES = ['delivered', 'completed']
 
 const ACTION_LABELS = {
   item_added: 'Added',
@@ -51,6 +55,8 @@ export default function AdminOrders() {
   const [updating, setUpdating] = useState(null)
 
   const [detailTab, setDetailTab] = useState('details')
+  const [returnModal, setReturnModal] = useState(null)
+  const [returnsRefresh, setReturnsRefresh] = useState(0)
   const [editLogs, setEditLogs] = useState([])
   const [loadingLogs, setLoadingLogs] = useState(false)
 
@@ -59,6 +65,7 @@ export default function AdminOrders() {
   const [generating, setGenerating] = useState(false)
   const [settling, setSettling] = useState(false)
   const [showSettleForm, setShowSettleForm] = useState(false)
+  const [showCreditForm, setShowCreditForm] = useState(false)
   const [settleMethod, setSettleMethod] = useState('')
   const [settleAmount, setSettleAmount] = useState('')
   const [settleRefNo, setSettleRefNo] = useState('')
@@ -98,6 +105,7 @@ export default function AdminOrders() {
 
   useEffect(() => {
     setShowSettleForm(false)
+    setShowCreditForm(false)
     setSettleMethod('')
     setSettleAmount('')
     setSettleRefNo('')
@@ -161,7 +169,7 @@ export default function AdminOrders() {
     if (!settleAmount || isNaN(parsedAmount) || parsedAmount <= 0) {
       notify('Please enter a valid payment amount.', 'error'); return
     }
-    const remaining = invoice.final_amount - (Number(invoice.total_paid_amount) || 0)
+    const remaining = invoiceBalance(invoice)
     if (parsedAmount > remaining + 0.005) {
       notify(`Payment exceeds remaining balance ($${remaining.toFixed(2)}).`, 'error'); return
     }
@@ -384,13 +392,16 @@ export default function AdminOrders() {
           i.product_id === product.id ? { ...i, quantity: i.quantity + 1 } : i
         )
       }
+      const hasDeal = product.deal_price !== null && product.deal_price !== undefined && product.deal_price > 0 && (!product.ProductCollection || product.ProductCollection.is_active)
+      const effectivePrice = hasDeal ? product.deal_price : product.price
       const updated = [
         ...prev,
         {
           product_id: product.id,
           name: product.name,
           unit: product.unit || '',
-          price: product.price,
+          price: effectivePrice,
+          deal_price: product.deal_price,
           custom_price: '',
           stock_quantity: product.stock_quantity,
           quantity: 1,
@@ -416,7 +427,7 @@ export default function AdminOrders() {
     setSavingEdit(true)
     setEditError(null)
     try {
-      await editOrder(
+      const res = await editOrder(
         editModal.id,
         editItems.map(({ product_id, quantity, custom_price }) => ({
           product_id,
@@ -424,7 +435,7 @@ export default function AdminOrders() {
           custom_price: custom_price !== '' && !isNaN(parseFloat(custom_price)) ? parseFloat(custom_price) : null,
         }))
       )
-      notify('Order updated successfully.')
+      notify(res.data.message || 'Order updated successfully.', res.data.data?.invoice_pdf_failed ? 'error' : 'success')
       setEditModal(null)
       refresh()
     } catch (err) {
@@ -540,7 +551,13 @@ export default function AdminOrders() {
     } else if (filter !== 'All' && o.status !== filter) {
       return false
     }
-    if (search && !String(o.id).includes(search) && !(storeMap[o.shop_id] || '').toLowerCase().includes(search.toLowerCase())) return false
+    if (search) {
+      const q = search.toLowerCase().trim()
+      const matchesId = String(o.id).includes(q)
+      const matchesStore = (storeMap[o.shop_id] || '').toLowerCase().includes(q)
+      const matchesDate = fmtDate(o.created_at).includes(q) || fmtDate(o.created_at).replace(/\//g, '').includes(q.replace(/\//g, ''))
+      if (!matchesId && !matchesStore && !matchesDate) return false
+    }
     return true
   })
 
@@ -579,6 +596,15 @@ export default function AdminOrders() {
           </Button>
         }
       />
+
+      {/* Notifications (fixed so they stay visible above open dialogs) */}
+      {msg && (
+        <div role="status" className={`fixed top-4 left-1/2 -translate-x-1/2 z-[60] max-w-md w-[calc(100%-2rem)] p-3 rounded-lg text-xs font-medium shadow-lg ${
+          msg.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'
+        }`}>
+          {msg.text}
+        </div>
+      )}
 
       <TableToolbar>
         <FilterBar>
@@ -680,6 +706,14 @@ export default function AdminOrders() {
                         Edit
                       </button>
                     )}
+                    {RETURNABLE_STATUSES.includes(o.status) && (
+                      <button
+                        onClick={() => setReturnModal(o)}
+                        className="text-xs px-2.5 py-1 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 font-medium transition-colors border border-rose-200"
+                      >
+                        Return
+                      </button>
+                    )}
                     {(o.status === 'approved' || o.status === 'dispatched' || o.status === 'delivered') && (
                       <button
                         onClick={() => setDetail(o)}
@@ -708,7 +742,7 @@ export default function AdminOrders() {
           <div>
             {/* Tabs */}
             <div className="flex border-b border-gray-200 mb-5 -mt-1">
-              {[['details', 'Details'], ['history', 'Edit History']].map(([key, label]) => (
+              {[['details', 'Details'], ['history', 'Edit History'], ['returns', 'Returns']].map(([key, label]) => (
                 <button
                   key={key}
                   onClick={() => setDetailTab(key)}
@@ -727,6 +761,18 @@ export default function AdminOrders() {
                 </button>
               ))}
             </div>
+
+            {/* Returns Tab */}
+            {detailTab === 'returns' && (
+              <div className="space-y-3">
+                {RETURNABLE_STATUSES.includes(detail.status) && (
+                  <div className="flex justify-end">
+                    <Button variant="secondary" onClick={() => setReturnModal(detail)} className="text-xs">Return Items</Button>
+                  </div>
+                )}
+                <ReturnsHistory orderId={detail.id} refreshKey={returnsRefresh} canProcess onNotify={notify} />
+              </div>
+            )}
 
             {/* Edit History Tab */}
             {detailTab === 'history' && (
@@ -863,7 +909,7 @@ export default function AdminOrders() {
                     })()}
                     {invoice && (invoice.payment_status === 'paid' || invoice.payment_status === 'settled') ? null : invoice && (
                       <span className="ml-2 text-gray-400">
-                        Paid: {fmt(invoice.total_paid_amount || 0)} · Balance: {fmt((invoice.final_amount || 0) - (invoice.total_paid_amount || 0))}
+                        Paid: {fmt(invoice.total_paid_amount || 0)}{Number(invoice.total_credited_amount) > 0 ? ` · Credited: ${fmt(invoice.total_credited_amount)}` : ''} · Balance: {fmt(invoiceBalance(invoice))}
                       </span>
                     )}
                   </p>
@@ -897,12 +943,20 @@ export default function AdminOrders() {
                       >
                         {generating ? 'Regenerating...' : 'Regenerate'}
                       </button>
-                      {invoice.payment_status !== 'paid' && invoice.payment_status !== 'settled' && !showSettleForm && (
+                      {invoice.payment_status !== 'paid' && invoice.payment_status !== 'settled' && !showSettleForm && !showCreditForm && (
                         <button
                           onClick={() => setShowSettleForm(true)}
                           className="text-xs px-3 py-1.5 rounded bg-green-600 hover:bg-green-700 text-white font-medium transition-colors"
                         >
                           {invoice.payment_status === 'partially_paid' ? 'Record Payment' : 'Settle Transaction'}
+                        </button>
+                      )}
+                      {invoice.payment_status !== 'paid' && invoice.payment_status !== 'settled' && !showSettleForm && !showCreditForm && invoiceBalance(invoice) > 0 && (
+                        <button
+                          onClick={() => setShowCreditForm(true)}
+                          className="text-xs px-3 py-1.5 rounded border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium transition-colors"
+                        >
+                          Apply Credit Note
                         </button>
                       )}
                     </>
@@ -934,7 +988,7 @@ export default function AdminOrders() {
                       <tbody className="divide-y divide-gray-100">
                         {payments.map((p) => (
                           <tr key={p.id}>
-                            <td className="px-2 py-2 text-gray-600">{new Date(p.verified_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                            <td className="px-2 py-2 text-gray-600">{fmtDate(p.verified_at)}</td>
                             <td className="px-2 py-2 font-medium">{p.payment_method === 'MO' ? 'Money Order' : p.payment_method}</td>
                             <td className="px-2 py-2 font-semibold text-green-700">{fmt(p.payment_amount)}</td>
                             <td className="px-2 py-2 font-mono text-gray-500">{p.payment_reference_no || '—'}</td>
@@ -948,13 +1002,27 @@ export default function AdminOrders() {
                 </div>
               )}
 
+              {showCreditForm && invoice && (
+                <ApplyCreditNote
+                  invoice={invoice}
+                  onCancel={() => setShowCreditForm(false)}
+                  onApplied={(body) => {
+                    setInvoice(body.data.invoice)
+                    setPayments(body.data.invoice?.PaymentHistory || [])
+                    setShowCreditForm(false)
+                    notify(body.message || 'Credit applied.')
+                    refresh()
+                  }}
+                />
+              )}
+
               {/* Record Payment form */}
               {showSettleForm && (
                 <div className="mt-3 pt-3 border-t border-gray-200 space-y-3">
                   <p className="text-xs font-semibold text-gray-700">Record Payment
                     {invoice && (
                       <span className="ml-2 font-normal text-gray-400">
-                        Remaining: {fmt((invoice.final_amount || 0) - (invoice.total_paid_amount || 0))}
+                        Remaining: {fmt(invoiceBalance(invoice))}
                       </span>
                     )}
                   </p>
@@ -980,10 +1048,10 @@ export default function AdminOrders() {
                         type="number"
                         step="0.01"
                         min="0.01"
-                        max={invoice ? invoice.final_amount - (invoice.total_paid_amount || 0) : undefined}
+                        max={invoice ? invoiceBalance(invoice) : undefined}
                         value={settleAmount}
                         onChange={(e) => setSettleAmount(e.target.value)}
-                        placeholder={invoice ? `Max ${fmt(invoice.final_amount - (invoice.total_paid_amount || 0))}` : '0.00'}
+                        placeholder={invoice ? `Max ${fmt(invoiceBalance(invoice))}` : '0.00'}
                         className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
                       />
                     </div>
@@ -1088,6 +1156,22 @@ export default function AdminOrders() {
           </div>
         )}
       </Modal>
+
+      {/* Return Items Modal */}
+      {returnModal && (
+        <ReturnItemsModal
+          order={returnModal}
+          storeName={storeMap[returnModal.shop_id] || `Store #${returnModal.shop_id}`}
+          onClose={() => setReturnModal(null)}
+          onSaved={(body) => {
+            notify(body.message || 'Return recorded.', body.data?.pdf_failed ? 'error' : 'success')
+            if (detail?.id === returnModal.id && body.data?.invoice) setInvoice((prev) => (prev ? { ...prev, ...body.data.invoice } : prev))
+            setReturnModal(null)
+            setReturnsRefresh((k) => k + 1)
+            refresh()
+          }}
+        />
+      )}
 
       {/* Edit Order Modal */}
       <Modal

@@ -10,6 +10,7 @@ import {
 } from '../../api'
 import { getUser } from '../../auth'
 import { PageLayout, PageHeader, Button, SearchBar, DataTable, Pagination } from '../../components/DesignSystem'
+import { fmtDate } from '../../utils/date'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 
@@ -538,7 +539,7 @@ export default function VariationGroups() {
                         )}
                       </div>
                       <div className="text-xs text-gray-500 mt-0.5 flex items-center gap-2">
-                        <span>Created: {new Date(g.created_at).toLocaleDateString()}</span>
+                        <span>Created: {fmtDate(g.created_at)}</span>
                         <span>•</span>
                         <span className="truncate max-w-md text-gray-600">{prods.map(p => p.name).join(', ')}</span>
                       </div>

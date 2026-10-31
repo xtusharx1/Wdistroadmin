@@ -5,7 +5,7 @@ import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Field, Pagination } from '../../components/DesignSystem'
 
 const ROLES = ['Admin', 'Sales Executive']
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
+import { fmtDate } from '../../utils/date'
 
 const blank = { name: '', email: '', password: '', role: 'Admin', phone: '' }
 
@@ -51,7 +51,9 @@ export default function UserManagement() {
     return (
       (u.name || '').toLowerCase().includes(q) ||
       (u.email || '').toLowerCase().includes(q) ||
-      (u.phone || '').toLowerCase().includes(q)
+      (u.phone || '').toLowerCase().includes(q) ||
+      fmtDate(u.created_at).includes(q) ||
+      fmtDate(u.created_at).replace(/\//g, '').includes(q.replace(/\//g, ''))
     )
   })
 

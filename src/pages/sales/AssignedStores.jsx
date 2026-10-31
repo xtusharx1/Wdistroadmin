@@ -4,9 +4,9 @@ import { getSalesAssignments, getOrders, updateOrderStatus, getInvoice, generate
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, Dialog as Modal, DataTable, Pagination } from '../../components/DesignSystem'
 
+import { fmtDate, fmtTime } from '../../utils/date'
+
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
-const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
-const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
 
 export default function AssignedStores() {
   const me = getUser()
@@ -711,7 +711,7 @@ export default function AssignedStores() {
                   </h4>
                   <p className="text-xs text-gray-500 mt-1">
                     {loadingInvoice ? 'Checking invoice status...' :
-                      invoice ? `Invoice #${invoice.id} generated on ${new Date(invoice.generated_at).toLocaleDateString('en-IN')}` :
+                      invoice ? `Invoice #${invoice.id} generated on ${fmtDate(invoice.generated_at)}` :
                         'No invoice generated for this order yet.'}
                   </p>
                 </div>

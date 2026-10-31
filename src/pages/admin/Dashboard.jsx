@@ -14,8 +14,8 @@ import StatusBadge from '../../components/StatusBadge'
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`
 const fmtDecimal = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 const fmtNum = (n) => Number(n || 0).toLocaleString('en-US')
+import { fmtDate as fmtDateFull } from '../../utils/date'
 const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : '—')
-const fmtDateFull = (d) => (d ? new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '—')
 
 // ── Status color map for the donut chart ────────────────────────────────────
 const STATUS_COLORS = {

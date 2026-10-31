@@ -3,7 +3,7 @@ import { getAssignments, getUsers, getShops, createAssignment, endAssignment, up
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, LoadingState, Dialog as Modal, Field, Pagination } from '../../components/DesignSystem'
 import StatusBadge from '../../components/StatusBadge'
 
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
+import { fmtDate } from '../../utils/date'
 const today = () => new Date().toISOString().split('T')[0]
 
 const BLANK_FORM = { sales_exec_id: '', shop_id: '', start_date: today(), end_date: '' }
@@ -121,7 +121,9 @@ export default function Assignments() {
     if (!q) return true
     const execName = a.SalesExec?.name?.toLowerCase() || ''
     const storeName = a.Shop?.name?.toLowerCase() || ''
-    return execName.includes(q) || storeName.includes(q)
+    const matchesStartDate = fmtDate(a.start_date).includes(q) || fmtDate(a.start_date).replace(/\//g, '').includes(q.replace(/\//g, ''))
+    const matchesEndDate = a.end_date && (fmtDate(a.end_date).includes(q) || fmtDate(a.end_date).replace(/\//g, '').includes(q.replace(/\//g, '')))
+    return execName.includes(q) || storeName.includes(q) || matchesStartDate || matchesEndDate
   })
 
   const totalPages = Math.ceil(visible.length / PAGE_SIZE)

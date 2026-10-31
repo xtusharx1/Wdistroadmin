@@ -3,8 +3,9 @@ import { getIncentives, getUsers } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, SearchBar } from '../../components/DesignSystem'
 
+import { fmtDate } from '../../utils/date'
+
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
-const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
 
 export default function AdminSalesPerformance() {
   const [executives, setExecutives] = useState([])

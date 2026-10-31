@@ -4,9 +4,10 @@ import { getSalesAssignments, getOrders, updateOrderStatus, getInvoice, generate
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 
+import { fmtDate, fmtTime } from '../../utils/date'
+import { invoiceBalance } from '../../utils/invoice'
+
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
-const fmtDate = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—')
-const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-GB', { timeZone: 'America/Los_Angeles', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
 
 const FILTERS = ['All', 'pending', 'approved', 'dispatched', 'delivered']
 
@@ -120,7 +121,7 @@ export default function SalesOrders() {
     if (!settleAmount || isNaN(parsedAmount) || parsedAmount <= 0) {
       alert('Please enter a valid payment amount.'); return
     }
-    const remaining = invoice.final_amount - (Number(invoice.total_paid_amount) || 0)
+    const remaining = invoiceBalance(invoice)
     if (parsedAmount > remaining + 0.005) {
       alert(`Payment exceeds remaining balance ($${remaining.toFixed(2)}).`); return
     }
@@ -228,7 +229,8 @@ export default function SalesOrders() {
     const q = search.toLowerCase().trim()
     if (!q) return true
     const storeName = storeMap[o.shop_id]?.toLowerCase() || ''
-    return String(o.id).includes(q) || storeName.includes(q)
+    const matchesDate = fmtDate(o.created_at).includes(q) || fmtDate(o.created_at).replace(/\//g, '').includes(q.replace(/\//g, ''))
+    return String(o.id).includes(q) || storeName.includes(q) || matchesDate
   })
 
   const totalPages = Math.ceil(visible.length / PAGE_SIZE)
@@ -402,7 +404,7 @@ export default function SalesOrders() {
                       })()}
                       {invoice && (invoice.payment_status === 'paid' || invoice.payment_status === 'settled') ? null : invoice && (
                         <span className="ml-2 text-gray-400">
-                          Paid: {fmt(invoice.total_paid_amount || 0)} · Balance: {fmt((invoice.final_amount || 0) - (invoice.total_paid_amount || 0))}
+                          Paid: {fmt(invoice.total_paid_amount || 0)} · Balance: {fmt(invoiceBalance(invoice))}
                         </span>
                       )}
                     </p>
@@ -473,7 +475,7 @@ export default function SalesOrders() {
                         <tbody className="divide-y divide-gray-100">
                           {payments.map((p) => (
                             <tr key={p.id}>
-                              <td className="px-2 py-2 text-gray-600">{new Date(p.verified_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</td>
+                              <td className="px-2 py-2 text-gray-600">{fmtDate(p.verified_at)}</td>
                               <td className="px-2 py-2 font-medium">{p.payment_method === 'MO' ? 'Money Order' : p.payment_method}</td>
                               <td className="px-2 py-2 font-semibold text-green-700">{fmt(p.payment_amount)}</td>
                               <td className="px-2 py-2 font-mono text-gray-500">{p.payment_reference_no || '—'}</td>
@@ -493,7 +495,7 @@ export default function SalesOrders() {
                     <p className="text-xs font-semibold text-gray-700">Record Payment
                       {invoice && (
                         <span className="ml-2 font-normal text-gray-400">
-                          Remaining: {fmt((invoice.final_amount || 0) - (invoice.total_paid_amount || 0))}
+                          Remaining: {fmt(invoiceBalance(invoice))}
                         </span>
                       )}
                     </p>
@@ -519,10 +521,10 @@ export default function SalesOrders() {
                           type="number"
                           step="0.01"
                           min="0.01"
-                          max={invoice ? invoice.final_amount - (invoice.total_paid_amount || 0) : undefined}
+                          max={invoice ? invoiceBalance(invoice) : undefined}
                           value={settleAmount}
                           onChange={(e) => setSettleAmount(e.target.value)}
-                          placeholder={invoice ? `Max ${fmt(invoice.final_amount - (invoice.total_paid_amount || 0))}` : '0.00'}
+                          placeholder={invoice ? `Max ${fmt(invoiceBalance(invoice))}` : '0.00'}
                           className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400"
                         />
                       </div>

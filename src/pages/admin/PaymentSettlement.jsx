@@ -1,14 +1,45 @@
 import { useState, useEffect, useMemo } from 'react'
-import { getOrders, getShops, getInvoice, getAllPayments, addInvoicePayment } from '../../api'
-import { PageLayout, PageHeader, Button, SearchBar, DataTable, Pagination } from '../../components/DesignSystem'
+import { getOrders, getShops, getInvoice, getAllPayments, addInvoicePayment, updatePayment } from '../../api'
+import { PageLayout, PageHeader, Button, SearchBar, DataTable, Pagination, Dialog, Field } from '../../components/DesignSystem'
+
+import { fmtDate, fmtTime } from '../../utils/date'
+import { invoiceBalance } from '../../utils/invoice'
+import ApplyCreditNote from './ApplyCreditNote'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-const fmtTime = (d) => (d ? new Intl.DateTimeFormat('en-US', { timeZone: 'America/Los_Angeles', month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(d)) : '—')
 
 const statusBadge = (status) => {
   if (status === 'paid' || status === 'settled') return { label: '✓ Paid', cls: 'bg-green-50 text-green-700 border-green-200' }
   if (status === 'partially_paid') return { label: '~ Partial', cls: 'bg-orange-50 text-orange-700 border-orange-200' }
   return { label: 'Unsettled', cls: 'bg-yellow-50 text-yellow-700 border-yellow-200' }
+}
+
+// Payment times are displayed in LA time, so the edit form reads/writes LA wall-clock time
+const LA_TZ = 'America/Los_Angeles'
+const laParts = (ms) => {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: LA_TZ, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+  }).formatToParts(new Date(ms))
+  return Object.fromEntries(parts.map((p) => [p.type, p.value]))
+}
+const toLaInput = (d) => {
+  const dt = new Date(d)
+  if (isNaN(dt.getTime())) return ''
+  const p = laParts(dt.getTime())
+  return `${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}`
+}
+const fromLaInput = (str) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(str || '')
+  if (!m) return null
+  const wall = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])
+  let ms = wall
+  for (let i = 0; i < 2; i++) {
+    const p = laParts(ms)
+    const shown = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute)
+    ms += wall - shown
+  }
+  return new Date(ms)
 }
 
 export default function PaymentSettlement() {
@@ -50,6 +81,8 @@ function HistoryTab() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [page, setPage] = useState(1)
+  const [editing, setEditing] = useState(null)
+  const [successMsg, setSuccessMsg] = useState('')
   const PAGE_SIZE = 15
 
   useEffect(() => {
@@ -58,6 +91,17 @@ function HistoryTab() {
       .catch(() => setPayments([]))
       .finally(() => setLoading(false))
   }, [])
+
+  const handleSaved = (updated, message) => {
+    // Sibling payments on the same invoice share its recomputed totals
+    setPayments((prev) => prev.map((p) => {
+      if (p.id === updated.id) return updated
+      if (p.invoice_id === updated.invoice_id && updated.Invoice) return { ...p, Invoice: updated.Invoice }
+      return p
+    }))
+    setEditing(null)
+    setSuccessMsg(message)
+  }
 
   useEffect(() => {
     setPage(1)
@@ -73,7 +117,10 @@ function HistoryTab() {
       const method = p.payment_method.toLowerCase()
       const ref = (p.payment_reference_no || '').toLowerCase()
       const by = (p.VerifiedBy?.name || '').toLowerCase()
-      return invoiceId.includes(q) || orderId.includes(q) || shop.includes(q) || method.includes(q) || ref.includes(q) || by.includes(q)
+      const dStr = fmtTime(p.verified_at).toLowerCase()
+      const dOnly = fmtDate(p.verified_at).toLowerCase()
+      const matchesDate = dStr.includes(q) || dOnly.includes(q) || dOnly.replace(/\//g, '').includes(q.replace(/\//g, ''))
+      return invoiceId.includes(q) || orderId.includes(q) || shop.includes(q) || method.includes(q) || ref.includes(q) || by.includes(q) || matchesDate
     })
   }, [payments, search])
 
@@ -93,8 +140,15 @@ function HistoryTab() {
         />
       </div>
 
+      {successMsg && (
+        <div className="mb-4 px-3 py-2 rounded bg-green-50 border border-green-200 text-green-700 text-xs font-medium flex items-center justify-between gap-3">
+          <span>{successMsg}</span>
+          <button onClick={() => setSuccessMsg('')} className="text-green-600 hover:text-green-800 leading-none">×</button>
+        </div>
+      )}
+
       <DataTable
-        headers={['#', 'Invoice #', 'Order #', 'Customer', 'Method', 'Amount', 'Ref No', 'Remarks', 'Verified By', 'Date & Time']}
+        headers={['#', 'Invoice #', 'Order #', 'Customer', 'Method', 'Amount', 'Ref No', 'Remarks', 'Verified By', 'Date & Time', 'Actions']}
         empty={filtered.length === 0}
       >
         {paginatedPayments.map((p, idx) => (
@@ -113,6 +167,15 @@ function HistoryTab() {
             <td className="px-3 py-3 text-gray-500 max-w-[140px] truncate">{p.remarks || '—'}</td>
             <td className="px-3 py-3 text-gray-600">{p.VerifiedBy?.name || `User #${p.verified_by_user_id}` || '—'}</td>
             <td className="px-3 py-3 text-gray-500 whitespace-nowrap">{fmtTime(p.verified_at)}</td>
+            <td className="px-3 py-3">
+              {p.Invoice?.payment_status === 'settled' ? (
+                <span title="This invoice has been settled. Its payments are locked and can no longer be edited.">
+                  <Button variant="secondary" disabled className="py-0.5 px-2 text-2xs">Locked</Button>
+                </span>
+              ) : (
+                <Button variant="warning" onClick={() => { setSuccessMsg(''); setEditing(p) }} className="py-0.5 px-2 text-2xs">Edit</Button>
+              )}
+            </td>
           </tr>
         ))}
       </DataTable>
@@ -123,7 +186,164 @@ function HistoryTab() {
         totalItems={filtered.length}
         onPageChange={setPage}
       />
+
+      {editing && (
+        <EditPaymentDialog
+          payment={editing}
+          onClose={() => setEditing(null)}
+          onSaved={handleSaved}
+        />
+      )}
     </div>
+  )
+}
+
+function EditPaymentDialog({ payment, onClose, onSaved }) {
+  const initial = useMemo(() => ({
+    payment_method: payment.payment_method,
+    payment_amount: String(payment.payment_amount ?? ''),
+    payment_reference_no: payment.payment_reference_no || '',
+    remarks: payment.remarks || '',
+    verified_at: toLaInput(payment.verified_at),
+  }), [payment])
+
+  const [form, setForm] = useState(initial)
+  const [errors, setErrors] = useState({})
+  const [errorMsg, setErrorMsg] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const invoice = payment.Invoice
+  const maxAmount = invoice
+    ? Math.max(0, invoice.final_amount - ((Number(invoice.total_paid_amount) || 0) - (Number(payment.payment_amount) || 0)) - (Number(invoice.total_credited_amount) || 0))
+    : null
+
+  const setField = (key, value) => {
+    setForm((f) => ({ ...f, [key]: value }))
+    setErrors((e) => ({ ...e, [key]: undefined }))
+    setErrorMsg('')
+  }
+
+  const validate = () => {
+    const e = {}
+    if (!form.payment_method) e.payment_method = 'Please select a payment method.'
+    const amt = Number(form.payment_amount)
+    // Legacy invoices can already be overpaid, so only limit an amount the user changed
+    const amtChanged = amt !== Number(initial.payment_amount)
+    if (form.payment_amount === '' || !Number.isFinite(amt) || amt <= 0) {
+      e.payment_amount = 'Enter a positive amount.'
+    } else if (amtChanged && !/^\d+(\.\d{1,2})?$/.test(String(form.payment_amount).trim())) {
+      e.payment_amount = 'Amount can have at most 2 decimal places.'
+    } else if (amtChanged && maxAmount !== null && amt > maxAmount + 0.005) {
+      e.payment_amount = `Cannot exceed ${fmt(maxAmount)} (remaining invoice balance).`
+    }
+    const d = fromLaInput(form.verified_at)
+    if (!d) e.verified_at = 'Enter a valid payment date and time.'
+    else if (d.getTime() > Date.now() + 5 * 60 * 1000) e.verified_at = 'Payment date cannot be in the future.'
+    if (form.payment_reference_no.length > 255) e.payment_reference_no = 'Must be 255 characters or fewer.'
+    if (form.remarks.length > 2000) e.remarks = 'Must be 2000 characters or fewer.'
+    return e
+  }
+
+  const handleSubmit = async (ev) => {
+    ev.preventDefault()
+    if (saving) return
+    const e = validate()
+    setErrors(e)
+    if (Object.keys(e).length > 0) return
+
+    // Send only changed fields
+    const changes = {}
+    if (form.payment_method !== initial.payment_method) changes.payment_method = form.payment_method
+    if (Number(form.payment_amount) !== Number(initial.payment_amount)) changes.payment_amount = Number(form.payment_amount)
+    if (form.payment_reference_no.trim() !== initial.payment_reference_no) changes.payment_reference_no = form.payment_reference_no.trim()
+    if (form.remarks.trim() !== initial.remarks) changes.remarks = form.remarks.trim()
+    if (form.verified_at !== initial.verified_at) changes.verified_at = fromLaInput(form.verified_at).toISOString()
+
+    if (Object.keys(changes).length === 0) {
+      onClose()
+      return
+    }
+
+    setSaving(true)
+    try {
+      const res = await updatePayment(payment.id, changes)
+      onSaved(res.data.data.payment, res.data.message || 'Payment updated successfully.')
+    } catch (err) {
+      const data = err.response?.data
+      if (data?.errors) setErrors(data.errors)
+      setErrorMsg(data?.message || 'Failed to update payment.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const inputCls = (key) =>
+    `w-full border rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 ${errors[key] ? 'border-red-400' : 'border-gray-300'}`
+
+  return (
+    <Dialog open onClose={saving ? () => {} : onClose} title={`Edit Payment — Invoice #${payment.invoice_id}`}>
+      <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+        <div className="grid grid-cols-2 gap-3 p-3 bg-gray-50 rounded-lg text-xs">
+          <div>
+            <p className="text-gray-400">Order / Customer</p>
+            <p className="font-medium text-gray-800">WS-{invoice?.Order?.id || '—'} · {invoice?.Order?.Shop?.shop_name || `Shop #${invoice?.Order?.shop_id}`}</p>
+          </div>
+          <div>
+            <p className="text-gray-400">Invoice Total / Paid</p>
+            <p className="font-medium text-gray-800">{fmt(invoice?.final_amount)} / {fmt(invoice?.total_paid_amount)}</p>
+          </div>
+        </div>
+
+        {errorMsg && (
+          <div className="px-3 py-2 rounded bg-red-50 border border-red-200 text-red-700 text-xs font-medium">{errorMsg}</div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <Field label="Payment Method" required error={errors.payment_method}>
+            <select value={form.payment_method} onChange={(e) => setField('payment_method', e.target.value)} className={inputCls('payment_method')} disabled={saving}>
+              <option value="">Select method…</option>
+              <option value="Cash">Cash</option>
+              <option value="Card">Card</option>
+              <option value="Check">Check</option>
+              <option value="MO">Money Order (MO)</option>
+              <option value="Adjusted">Adjusted</option>
+            </select>
+          </Field>
+          <Field label="Payment Amount" required error={errors.payment_amount}>
+            <input type="number" step="0.01" min="0.01" max={maxAmount ?? undefined}
+              value={form.payment_amount} onChange={(e) => setField('payment_amount', e.target.value)}
+              className={inputCls('payment_amount')} disabled={saving} />
+            {maxAmount !== null && !errors.payment_amount && (
+              <span className="text-3xs text-gray-400">Max {fmt(maxAmount)}</span>
+            )}
+          </Field>
+        </div>
+
+        <Field label="Payment Date & Time (PT)" required error={errors.verified_at}>
+          <input type="datetime-local" value={form.verified_at} onChange={(e) => setField('verified_at', e.target.value)}
+            className={inputCls('verified_at')} disabled={saving} />
+        </Field>
+
+        <Field label="Payment Reference No" error={errors.payment_reference_no}>
+          <input type="text" value={form.payment_reference_no} onChange={(e) => setField('payment_reference_no', e.target.value)}
+            placeholder="e.g. CHK-12345" className={inputCls('payment_reference_no')} disabled={saving} />
+        </Field>
+
+        <Field label="Remarks" error={errors.remarks}>
+          <textarea rows={2} value={form.remarks} onChange={(e) => setField('remarks', e.target.value)}
+            placeholder="Any notes about this payment…" className={inputCls('remarks')} disabled={saving} />
+        </Field>
+
+        <p className="text-3xs text-gray-400">
+          Changing the amount recalculates the invoice's paid total, balance and status. Every edit is recorded in the audit log.
+        </p>
+
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-gray-100">
+          <Button type="button" variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save Changes'}</Button>
+        </div>
+      </form>
+    </Dialog>
   )
 }
 
@@ -139,6 +359,7 @@ function RecordTab() {
   const [invoice, setInvoice] = useState(null)
   const [loadingInvoice, setLoadingInvoice] = useState(false)
   const [settling, setSettling] = useState(false)
+  const [showCreditForm, setShowCreditForm] = useState(false)
 
   const [method, setMethod] = useState('')
   const [amount, setAmount] = useState('')
@@ -160,12 +381,12 @@ function RecordTab() {
     let result = orders
     if (filterType === 'pending') {
       result = orders.filter((o) => {
-        const remaining = o.Invoice ? o.Invoice.final_amount - (Number(o.Invoice.total_paid_amount) || 0) : o.total_amount
+        const remaining = o.Invoice ? invoiceBalance(o.Invoice) : o.total_amount
         return remaining > 0.01
       })
     } else if (filterType === 'paid') {
       result = orders.filter((o) => {
-        const remaining = o.Invoice ? o.Invoice.final_amount - (Number(o.Invoice.total_paid_amount) || 0) : o.total_amount
+        const remaining = o.Invoice ? invoiceBalance(o.Invoice) : o.total_amount
         return remaining <= 0.01
       })
     }
@@ -182,6 +403,7 @@ function RecordTab() {
   const selectOrder = async (order) => {
     setSelectedOrder(order)
     setInvoice(null)
+    setShowCreditForm(false)
     setMethod('')
     setAmount('')
     setRefNo('')
@@ -204,7 +426,7 @@ function RecordTab() {
     if (!method) { setErrorMsg('Please select a payment method.'); return }
     const parsed = parseFloat(amount)
     if (!amount || isNaN(parsed) || parsed <= 0) { setErrorMsg('Please enter a valid payment amount.'); return }
-    const remaining = invoice.final_amount - (Number(invoice.total_paid_amount) || 0)
+    const remaining = invoiceBalance(invoice)
     if (parsed > remaining + 0.005) { setErrorMsg(`Amount exceeds remaining balance (${fmt(remaining)}).`); return }
     setErrorMsg('')
     setSettling(true)
@@ -238,7 +460,7 @@ function RecordTab() {
   }
 
   const isPaid = invoice && (invoice.payment_status === 'paid' || invoice.payment_status === 'settled')
-  const remaining = invoice ? invoice.final_amount - (Number(invoice.total_paid_amount) || 0) : 0
+  const remaining = invoice ? invoiceBalance(invoice) : 0
   const payments = invoice?.PaymentHistory || []
 
   return (
@@ -283,8 +505,7 @@ function RecordTab() {
               {filtered.map((o) => {
                 const badge = statusBadge(o.Invoice?.payment_status || 'unsettled')
                 const total = o.Invoice?.final_amount || o.total_amount
-                const paid = Number(o.Invoice?.total_paid_amount) || 0
-                const balance = total - paid
+                const balance = o.Invoice ? invoiceBalance(o.Invoice) : total
                 return (
                   <button
                     key={o.id}
@@ -362,6 +583,9 @@ function RecordTab() {
                 <div className="text-center p-3 bg-green-50 rounded-lg">
                   <p className="text-xs text-gray-400 mb-1">Total Paid</p>
                   <p className="font-bold text-green-700 text-sm">{fmt(invoice.total_paid_amount || 0)}</p>
+                  {Number(invoice.total_credited_amount) > 0 && (
+                    <p className="text-3xs text-indigo-600 mt-0.5">+ {fmt(invoice.total_credited_amount)} credited</p>
+                  )}
                 </div>
                 <div className={`text-center p-3 rounded-lg ${isPaid ? 'bg-green-50' : 'bg-orange-50'}`}>
                   <p className="text-xs text-gray-400 mb-1">Balance Due</p>
@@ -467,6 +691,26 @@ function RecordTab() {
                     {settling ? 'Saving…' : 'Record Payment'}
                   </button>
                 </div>
+
+                {showCreditForm ? (
+                  <ApplyCreditNote
+                    invoice={invoice}
+                    onCancel={() => setShowCreditForm(false)}
+                    onApplied={(body) => {
+                      const updatedInvoice = body.data.invoice
+                      setInvoice(updatedInvoice)
+                      setOrders((prev) => prev.map((o) => (o.Invoice && o.Invoice.id === updatedInvoice.id ? { ...o, Invoice: updatedInvoice } : o)))
+                      setShowCreditForm(false)
+                      setErrorMsg('')
+                      setSuccessMsg(body.message || 'Credit applied.')
+                    }}
+                  />
+                ) : (
+                  <button onClick={() => { setShowCreditForm(true); setSuccessMsg(''); setErrorMsg('') }}
+                    className="mt-3 w-full border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-medium py-2 text-sm rounded-md transition-colors">
+                    Apply Credit Note
+                  </button>
+                )}
               </div>
             )}
           </div>

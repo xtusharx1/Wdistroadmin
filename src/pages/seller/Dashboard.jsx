@@ -3,8 +3,9 @@ import { getDashboardStats } from '../../api'
 import StatCard from '../../components/StatCard'
 import StatusBadge from '../../components/StatusBadge'
 
+import { fmtDate } from '../../utils/date'
+
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
-const fmtDate = (d) => (d ? new Date(d).toLocaleDateString('en-IN') : '—')
 
 export default function SellerDashboard() {
   const [stats, setStats] = useState(null)
