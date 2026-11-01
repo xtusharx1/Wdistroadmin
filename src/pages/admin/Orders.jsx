@@ -7,6 +7,7 @@ import { fmtDate, fmtTime } from '../../utils/date'
 import { invoiceBalance } from '../../utils/invoice'
 import { ReturnItemsModal, ReturnsHistory } from './OrderReturns'
 import ApplyCreditNote from './ApplyCreditNote'
+import ChangeStoreDialog from '../../components/ChangeStoreDialog'
 
 const fmt = (n) => `$${Number(n || 0).toLocaleString('en-US')}`
 
@@ -51,6 +52,7 @@ export default function AdminOrders() {
   const [shopsList, setShopsList] = useState([])
   const [storeMap, setStoreMap] = useState({})
   const [approvedStores, setApprovedStores] = useState([])
+  const [changeStoreFor, setChangeStoreFor] = useState(null)
   const [storeEdit, setStoreEdit] = useState(null) // { shopId, saving, error }
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
@@ -453,21 +455,28 @@ export default function AdminOrders() {
   }
 
   const openProcess = (order) => {
-    setProcessModal({
-      order,
-      items: (order.OrderItems || []).map((item) => ({
+    const items = (order.OrderItems || []).map((item) => {
+      const stock = item.Product?.stock_quantity ?? null
+      const requested_qty = item.requested_qty
+      const defaultApproved = stock != null ? Math.min(requested_qty, Math.max(0, stock)) : requested_qty
+      return {
         id: item.id,
         name: item.Product?.name || `Product #${item.product_id}`,
         unit: item.Product?.unit || '',
         price: item.price,
         custom_price: item.custom_price || '',
-        requested_qty: item.requested_qty,
-        stock: item.Product?.stock_quantity ?? null,
+        requested_qty,
+        stock,
         inactive: item.Product?.is_active === false,
         // Start from what can actually be fulfilled from stock
-        approved_qty: item.Product?.stock_quantity != null ? Math.min(item.requested_qty, Math.max(0, item.Product.stock_quantity)) : item.requested_qty,
-      })),
-      createFollowup: false,
+        approved_qty: defaultApproved,
+      }
+    })
+    const hasUnavailable = items.some((i) => i.approved_qty < i.requested_qty)
+    setProcessModal({
+      order,
+      items,
+      createFollowup: hasUnavailable, // Default to checked whenever items are unavailable
     })
   }
 
@@ -494,9 +503,28 @@ export default function AdminOrders() {
   }
 
   const submitProcess = async () => {
+    const shortfallItems = processModal.items.filter((i) => i.approved_qty < i.requested_qty)
+    const hasShortfall = shortfallItems.length > 0
+
+    // If unchecked, ask for confirmation before dropping unavailable quantities
+    if (hasShortfall && !processModal.createFollowup) {
+      const totalShortfallQty = shortfallItems.reduce((sum, i) => sum + (i.requested_qty - i.approved_qty), 0)
+      const itemBreakdown = shortfallItems
+        .map((i) => `• ${i.name}: ${i.requested_qty - i.approved_qty} unfulfilled`)
+        .join('\n')
+      const confirmed = window.confirm(
+        `"Ship unavailable items later" is unchecked.\n\n` +
+        `The following ${totalShortfallQty} unavailable item(s) will be permanently dropped from order WS-${processModal.order.id} without creating a follow-up order:\n\n` +
+        `${itemBreakdown}\n\n` +
+        `Are you sure you want to drop these unavailable quantities permanently?`
+      )
+      if (!confirmed) {
+        return
+      }
+    }
+
     setUpdating('process')
     try {
-      const hasShortfall = processModal.items.some((i) => i.approved_qty < i.requested_qty)
       const res = await processOrder(
         processModal.order.id,
         processModal.items.map(({ id, approved_qty, custom_price }) => ({
@@ -852,48 +880,17 @@ export default function AdminOrders() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 text-sm">
               <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Store</p>
-                {storeEdit ? (
-                  <div className="mt-1 space-y-1.5">
-                    <select value={storeEdit.shopId} onChange={(e) => setStoreEdit({ ...storeEdit, shopId: e.target.value, error: null })}
-                      disabled={storeEdit.saving} aria-label="New store"
-                      className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400">
-                      {approvedStores.map((s) => <option key={s.id} value={s.id}>{s.shop_name}</option>)}
-                    </select>
-                    {storeEdit.error && <p className="text-xs text-red-600">{storeEdit.error}</p>}
-                    <p className="text-[11px] text-gray-400">Items, invoice and payments stay on this order and move with it.</p>
-                    <div className="flex gap-1.5">
-                      <button disabled={storeEdit.saving || Number(storeEdit.shopId) === detail.shop_id}
-                        onClick={async () => {
-                          setStoreEdit({ ...storeEdit, saving: true, error: null })
-                          try {
-                            const res = await changeOrderStore(detail.id, Number(storeEdit.shopId))
-                            const updated = res.data.data.order
-                            setDetail((d) => ({ ...d, shop_id: updated.shop_id }))
-                            setOrders((prev) => prev.map((o) => (o.id === updated.id ? { ...o, shop_id: updated.shop_id } : o)))
-                            if (updated.Invoice) setInvoice((inv) => (inv ? { ...inv, pdf_url: updated.Invoice.pdf_url } : inv))
-                            getOrderLogs(detail.id).then((r) => setEditLogs(r.data.data.logs || [])).catch(() => {})
-                            setStoreEdit(null)
-                            notify(res.data.message, res.data.data.invoice_pdf_failed ? 'error' : 'success')
-                          } catch (err) {
-                            setStoreEdit((s) => ({ ...s, saving: false, error: err.response?.data?.message || 'Failed to change store.' }))
-                          }
-                        }}
-                        className="text-xs px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium disabled:opacity-50">
-                        {storeEdit.saving ? 'Saving…' : 'Save store'}
-                      </button>
-                      <button disabled={storeEdit.saving} onClick={() => setStoreEdit(null)}
-                        className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium">Cancel</button>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="font-medium">
-                    {storeMap[detail.shop_id] || `Store #${detail.shop_id}`}
-                    {!['cancelled', 'rejected'].includes(detail.status) && (
-                      <button onClick={() => setStoreEdit({ shopId: detail.shop_id, saving: false, error: null })}
-                        className="ml-2 text-xs font-medium text-indigo-600 hover:underline">Change</button>
-                    )}
-                  </p>
-                )}
+                <p className="font-medium mt-1">
+                  {storeMap[detail.shop_id] || `Store #${detail.shop_id}`}
+                  {!['cancelled', 'rejected'].includes(detail.status) && (
+                    <button
+                      onClick={() => setChangeStoreFor(detail)}
+                      className="ml-2 text-xs font-semibold text-indigo-600 hover:text-indigo-800 hover:underline"
+                    >
+                      Change
+                    </button>
+                  )}
+                </p>
               </div>
               {(detail.parent_order_id || orders.some((o) => o.parent_order_id === detail.id)) && (
                 <div>
@@ -1266,6 +1263,43 @@ export default function AdminOrders() {
           }, 0)
           return (
             <div className="space-y-5">
+              {/* Order Store & Status Context Header */}
+              <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-gray-50 border border-gray-200 rounded-xl text-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-lg bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 font-bold shrink-0">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                    </svg>
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">Assigned Store</span>
+                    <span className="font-semibold text-gray-900 text-sm">
+                      {storeMap[editModal.shop_id] || `Store #${editModal.shop_id}`}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-400 uppercase tracking-wide mr-1">Status:</span>
+                  <StatusBadge status={editModal.status} />
+                  {!['cancelled', 'rejected'].includes(editModal.status) ? (
+                    <button
+                      type="button"
+                      onClick={() => setChangeStoreFor(editModal)}
+                      className="ml-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white border border-gray-300 text-gray-700 hover:bg-gray-100 hover:border-gray-400 shadow-2xs transition-colors"
+                      title="Change the assigned store for this order"
+                    >
+                      <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                      Change Store
+                    </button>
+                  ) : (
+                    <span className="ml-2 text-xs text-gray-400 italic">Cannot change store ({editModal.status})</span>
+                  )}
+                </div>
+              </div>
+
               {editError && (
                 <div className="flex items-start gap-2 px-3 py-2.5 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
                   <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -1454,6 +1488,30 @@ export default function AdminOrders() {
         })()}
       </Modal>
 
+      {/* Change Store Modal Dialog */}
+      {changeStoreFor && (
+        <ChangeStoreDialog
+          open={!!changeStoreFor}
+          orderId={changeStoreFor.id}
+          currentShopId={changeStoreFor.shop_id}
+          currentShopName={storeMap[changeStoreFor.shop_id] || `Store #${changeStoreFor.shop_id}`}
+          approvedStores={approvedStores}
+          storeMap={storeMap}
+          onClose={() => setChangeStoreFor(null)}
+          onSuccess={(updated, message, pdfFailed) => {
+            const nextShopId = updated?.shop_id ?? changeStoreFor.shop_id
+            setOrders((prev) => prev.map((o) => (o.id === changeStoreFor.id ? { ...o, shop_id: nextShopId } : o)))
+            setDetail((prev) => (prev && prev.id === changeStoreFor.id ? { ...prev, shop_id: nextShopId } : prev))
+            setEditModal((prev) => (prev && prev.id === changeStoreFor.id ? { ...prev, shop_id: nextShopId } : prev))
+            if (updated?.Invoice) {
+              setInvoice((inv) => (inv ? { ...inv, pdf_url: updated.Invoice.pdf_url } : inv))
+            }
+            getOrderLogs(changeStoreFor.id).then((r) => setEditLogs(r.data.data?.logs || [])).catch(() => {})
+            notify(message, pdfFailed ? 'error' : 'success')
+          }}
+        />
+      )}
+
       {/* Process Order Modal */}
       <Modal
         open={!!processModal}
@@ -1469,10 +1527,10 @@ export default function AdminOrders() {
             </p>
 
             <div className="overflow-x-auto mb-4">
-            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[540px]">
+            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[580px]">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Product', 'Unit Price', 'Custom Price', 'Requested', 'In Stock', 'Approve Qty', 'Subtotal'].map((h) => (
+                  {['Product', 'Unit Price', 'Custom Price', 'Requested', 'In Stock', 'Unavailable', 'Approve Qty', 'Subtotal'].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -1498,10 +1556,19 @@ export default function AdminOrders() {
                     </td>
                     <td className="px-3 py-2.5 text-gray-500">{item.requested_qty}</td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
-                      <span className={item.stock != null && item.stock < item.requested_qty ? 'text-red-600 font-semibold' : 'text-gray-500'}>
+                      <span className={item.stock != null && item.stock < item.requested_qty ? 'text-red-600 font-bold' : 'text-gray-600'}>
                         {item.stock ?? '—'}
                       </span>
                       {item.inactive && <span className="ml-1 text-[10px] font-semibold text-gray-500">(inactive)</span>}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {item.approved_qty < item.requested_qty ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          {item.requested_qty - item.approved_qty}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">0</span>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap">
                       <input
@@ -1530,17 +1597,21 @@ export default function AdminOrders() {
             </div>
 
             {processModal.items.some((i) => i.approved_qty < i.requested_qty) && (
-              <label className="flex items-start gap-2 mb-4 p-3 rounded-lg border border-sky-200 bg-sky-50 text-sm text-sky-900 cursor-pointer">
-                <input type="checkbox" checked={processModal.createFollowup}
+              <label className="flex items-start gap-2.5 mb-4 p-3.5 rounded-lg border border-indigo-200 bg-indigo-50/70 text-sm text-indigo-950 cursor-pointer shadow-2xs">
+                <input
+                  type="checkbox"
+                  checked={processModal.createFollowup}
                   onChange={(e) => setProcessModal((prev) => ({ ...prev, createFollowup: e.target.checked }))}
-                  className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                <span>
-                  Create a separate manual order for the removed quantities
-                  <span className="block text-xs text-sky-700 mt-0.5">
-                    {processModal.items.filter((i) => i.approved_qty < i.requested_qty).map((i) => `${i.name} × ${i.requested_qty - i.approved_qty}`).join(', ')}
-                    {' '}· same store, pending, linked to WS-{processModal.order.id}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-indigo-900">
+                    Ship unavailable items later
                   </span>
-                </span>
+                  <span className="block text-xs text-indigo-700 mt-0.5">
+                    Creates a separate manual order for unavailable items ({processModal.items.filter((i) => i.approved_qty < i.requested_qty).map((i) => `${i.name} × ${i.requested_qty - i.approved_qty}`).join(', ')}) · same store, pending, linked to WS-{processModal.order.id}
+                  </span>
+                </div>
               </label>
             )}
 

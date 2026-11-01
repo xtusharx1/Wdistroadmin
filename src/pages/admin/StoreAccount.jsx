@@ -58,7 +58,7 @@ export default function StoreAccountDialog({ store, onClose }) {
               <p className="text-2xl font-bold text-orange-700 mt-1">{money(balance.receivable)}</p>
               <dl className="mt-3 space-y-1 text-xs">
                 <Line label="Total invoiced" value={money(balance.total_invoiced)} />
-                <Line label="− Payments received" value={money(balance.total_payments)} />
+                <Line label="− Payments applied to invoices" value={money(balance.payments_applied ?? (balance.total_payments - balance.overpayments))} />
                 <Line label="− Credits applied to invoices" value={money(balance.total_credits_applied)} />
               </dl>
               <p className="text-[11px] text-orange-700/80 mt-2">

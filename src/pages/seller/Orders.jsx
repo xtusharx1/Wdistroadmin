@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getOrders, processOrder, updateOrderStatus, deleteOrder, getInvoice, generateInvoice, regenerateInvoice, getShops, editOrder, getProducts } from '../../api'
+import { getOrders, processOrder, updateOrderStatus, deleteOrder, changeOrderStore, getInvoice, generateInvoice, regenerateInvoice, getShops, editOrder, getProducts } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Pagination } from '../../components/DesignSystem'
+import ChangeStoreDialog from '../../components/ChangeStoreDialog'
 
 import { fmtDate } from '../../utils/date'
 
@@ -38,6 +39,9 @@ export default function SellerOrders() {
   // Delete rejected order state
   const [deleteConfirmOrder, setDeleteConfirmOrder] = useState(null)
   const [deleting, setDeleting] = useState(false)
+
+  // Change Store state
+  const [changeStoreFor, setChangeStoreFor] = useState(null)
 
   const notify = (text, type = 'success') => {
     setMsg({ text, type })
@@ -123,17 +127,27 @@ export default function SellerOrders() {
   }
 
   const openProcess = (order) => {
-    setProcessModal({
-      order,
-      items: (order.OrderItems || []).map((item) => ({
+    const items = (order.OrderItems || []).map((item) => {
+      const stock = item.Product?.stock_quantity ?? null
+      const requested_qty = item.requested_qty
+      const defaultApproved = stock != null ? Math.min(requested_qty, Math.max(0, stock)) : requested_qty
+      return {
         id: item.id,
         name: item.Product?.name || `Product #${item.product_id}`,
         unit: item.Product?.unit || '',
         price: item.price,
         custom_price: item.custom_price || '',
-        requested_qty: item.requested_qty,
-        approved_qty: item.requested_qty,
-      })).sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' })),
+        requested_qty,
+        stock,
+        inactive: item.Product?.is_active === false,
+        approved_qty: defaultApproved,
+      }
+    }).sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+    const hasUnavailable = items.some((i) => i.approved_qty < i.requested_qty)
+    setProcessModal({
+      order,
+      items,
+      createFollowup: hasUnavailable, // Default to checked whenever items are unavailable
     })
   }
 
@@ -289,19 +303,43 @@ export default function SellerOrders() {
   }
 
   const submitProcess = async () => {
+    const shortfallItems = processModal.items.filter((i) => i.approved_qty < i.requested_qty)
+    const hasShortfall = shortfallItems.length > 0
+
+    // If unchecked, ask for confirmation before dropping unavailable quantities
+    if (hasShortfall && !processModal.createFollowup) {
+      const totalShortfallQty = shortfallItems.reduce((sum, i) => sum + (i.requested_qty - i.approved_qty), 0)
+      const itemBreakdown = shortfallItems
+        .map((i) => `• ${i.name}: ${i.requested_qty - i.approved_qty} unfulfilled`)
+        .join('\n')
+      const confirmed = window.confirm(
+        `"Ship unavailable items later" is unchecked.\n\n` +
+        `The following ${totalShortfallQty} unavailable item(s) will be permanently dropped from order WS-${processModal.order.id} without creating a follow-up order:\n\n` +
+        `${itemBreakdown}\n\n` +
+        `Are you sure you want to drop these unavailable quantities permanently?`
+      )
+      if (!confirmed) {
+        return
+      }
+    }
+
     setActing('process')
     try {
-      await processOrder(
+      const res = await processOrder(
         processModal.order.id,
         processModal.items.map(({ id, approved_qty, custom_price }) => ({
           id,
           approved_qty,
           custom_price: custom_price !== '' && !isNaN(parseFloat(custom_price)) ? parseFloat(custom_price) : null
-        }))
+        })),
+        hasShortfall && processModal.createFollowup
       )
-      notify('Order approved and processed.')
+      notify(res.data.message && res.data.data?.followup_order_id ? res.data.message : 'Order approved and processed.')
       setProcessModal(null)
       refresh()
+      if (detailModal?.id === processModal.order.id) {
+        setDetailModal(null)
+      }
     } catch (err) {
       notify(err.response?.data?.message || 'Failed to process order.', 'error')
     } finally {
@@ -344,6 +382,9 @@ export default function SellerOrders() {
   }
 
   const storeMap = shops.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {})
+  const approvedStores = shops
+    .filter((s) => s.approval_status === 'Approved')
+    .sort((a, b) => (a.shop_name || '').localeCompare(b.shop_name || ''))
 
   const [page, setPage] = useState(1)
   const PAGE_SIZE = 15
@@ -416,12 +457,24 @@ export default function SellerOrders() {
               <tr key={o.id} className="hover:bg-gray-50">
                 <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * PAGE_SIZE + index + 1}</td>
                 <td className="px-4 py-3 font-medium">
-                  <button
-                    className="text-indigo-600 hover:underline"
-                    onClick={() => setDetailModal(o)}
-                  >
-                    WS-{o.id}
-                  </button>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <button
+                      className="text-indigo-600 hover:underline"
+                      onClick={() => setDetailModal(o)}
+                    >
+                      WS-{o.id}
+                    </button>
+                    {o.source === 'Admin' && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-3xs font-semibold bg-purple-50 text-purple-700 border border-purple-200" title="Manual / Admin Created">
+                        Manual
+                      </span>
+                    )}
+                    {o.parent_order_id && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200" title="Created for items removed during approval">
+                        Follow-up of WS-{o.parent_order_id}
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-4 py-3 text-gray-500">{storeMap[o.shop_id] || `Store #${o.shop_id}`}</td>
                 <td className="px-4 py-3 text-gray-500">{o.OrderItems?.length ?? 0}</td>
@@ -514,8 +567,22 @@ export default function SellerOrders() {
           <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 text-sm">
               {[
-                ['Store', storeMap[detailModal.shop_id] || `Store #${detailModal.shop_id}`],
+                ['Store', (
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <span className="font-medium">{storeMap[detailModal.shop_id] || `Store #${detailModal.shop_id}`}</span>
+                    {detailModal.status !== 'cancelled' && detailModal.status !== 'rejected' && (
+                      <button
+                        type="button"
+                        onClick={() => setChangeStoreFor(detailModal)}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium underline transition-colors cursor-pointer"
+                      >
+                        Change
+                      </button>
+                    )}
+                  </div>
+                )],
                 ['Status', null],
+                detailModal.parent_order_id && ['Parent Order', `WS-${detailModal.parent_order_id}`],
                 ['Placed', fmtDate(detailModal.created_at)],
                 ['Total', fmt(detailModal.total_amount)],
                 detailModal.approved_at && ['Approved', fmtDate(detailModal.approved_at)],
@@ -526,6 +593,8 @@ export default function SellerOrders() {
                   <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
                   {label === 'Status' ? (
                     <StatusBadge status={detailModal.status} />
+                  ) : typeof value === 'object' && value !== null ? (
+                    value
                   ) : (
                     <p className="font-medium mt-0.5">{value}</p>
                   )}
@@ -664,10 +733,10 @@ export default function SellerOrders() {
             </p>
 
             <div className="overflow-x-auto mb-4">
-            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[520px]">
+            <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[580px]">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Product', 'Unit Price', 'Custom Price', 'Requested', 'Approve Qty', 'Subtotal'].map((h) => (
+                  {['Product', 'Unit Price', 'Custom Price', 'Requested', 'In Stock', 'Unavailable', 'Approve Qty', 'Subtotal'].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -692,7 +761,22 @@ export default function SellerOrders() {
                       />
                     </td>
                     <td className="px-3 py-2.5 text-gray-500">{item.requested_qty}</td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={item.stock != null && item.stock < item.requested_qty ? 'text-red-600 font-bold' : 'text-gray-600'}>
+                        {item.stock ?? '—'}
+                      </span>
+                      {item.inactive && <span className="ml-1 text-[10px] font-semibold text-gray-500">(inactive)</span>}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      {item.approved_qty < item.requested_qty ? (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200">
+                          {item.requested_qty - item.approved_qty}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">0</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <input
                         type="number"
                         min="0"
@@ -705,6 +789,10 @@ export default function SellerOrders() {
                             : 'border-gray-300'
                         }`}
                       />
+                      {item.approved_qty > 0 && (
+                        <button type="button" onClick={() => updateItemQty(item.id, 0)}
+                          className="ml-1.5 text-xs text-red-600 hover:underline" title="Remove this item from the order">Remove</button>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 font-medium">
                       {fmt((item.custom_price !== '' && !isNaN(parseFloat(item.custom_price)) ? parseFloat(item.custom_price) : item.price) * item.approved_qty)}
@@ -714,6 +802,25 @@ export default function SellerOrders() {
               </tbody>
             </table>
             </div>
+
+            {processModal.items.some((i) => i.approved_qty < i.requested_qty) && (
+              <label className="flex items-start gap-2.5 mb-4 p-3.5 rounded-lg border border-indigo-200 bg-indigo-50/70 text-sm text-indigo-950 cursor-pointer shadow-2xs">
+                <input
+                  type="checkbox"
+                  checked={processModal.createFollowup}
+                  onChange={(e) => setProcessModal((prev) => ({ ...prev, createFollowup: e.target.checked }))}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                />
+                <div>
+                  <span className="font-semibold text-indigo-900">
+                    Ship unavailable items later
+                  </span>
+                  <span className="block text-xs text-indigo-700 mt-0.5">
+                    Creates a separate manual order for unavailable items ({processModal.items.filter((i) => i.approved_qty < i.requested_qty).map((i) => `${i.name} × ${i.requested_qty - i.approved_qty}`).join(', ')}) · same store, pending, linked to WS-{processModal.order.id}
+                  </span>
+                </div>
+              </label>
+            )}
 
             <div className="flex items-center justify-between mb-5">
               <span className="text-sm text-gray-500">Approved Total</span>
@@ -749,16 +856,30 @@ export default function SellerOrders() {
         {editModal && (
           <div>
             {/* Order context bar */}
-            <div className="flex flex-wrap items-center gap-4 mb-5 pb-4 border-b border-gray-100 text-sm">
-              <div>
-                <span className="text-xs text-gray-400 uppercase tracking-wide mr-1.5">Store</span>
-                <span className="font-medium">{storeMap[editModal.order.shop_id] || `Store #${editModal.order.shop_id}`}</span>
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-5 p-3.5 bg-gray-50 border border-gray-200 rounded-lg text-sm">
+              <div className="flex flex-wrap items-center gap-4">
+                <div>
+                  <span className="text-xs text-gray-400 uppercase tracking-wide mr-1.5">Store</span>
+                  <span className="font-semibold text-gray-900">{storeMap[editModal.order.shop_id] || `Store #${editModal.order.shop_id}`}</span>
+                  {editModal.order.status !== 'cancelled' && editModal.order.status !== 'rejected' && (
+                    <button
+                      type="button"
+                      onClick={() => setChangeStoreFor(editModal.order)}
+                      className="ml-2.5 inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-white border border-indigo-200 rounded-md shadow-2xs hover:bg-indigo-50 hover:border-indigo-300 transition-colors cursor-pointer"
+                    >
+                      <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                      </svg>
+                      Change Store
+                    </button>
+                  )}
+                </div>
+                <div>
+                  <span className="text-xs text-gray-400 uppercase tracking-wide mr-1.5">Status</span>
+                  <StatusBadge status={editModal.order.status} />
+                </div>
               </div>
-              <div>
-                <span className="text-xs text-gray-400 uppercase tracking-wide mr-1.5">Status</span>
-                <StatusBadge status={editModal.order.status} />
-              </div>
-              <div className="ml-auto text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded px-2.5 py-1">
+              <div className="text-xs text-gray-500 bg-amber-50 border border-amber-200 rounded px-2.5 py-1">
                 Changes are held in draft — nothing saves until you click <strong>Save Changes</strong>
               </div>
             </div>
@@ -991,6 +1112,28 @@ export default function SellerOrders() {
           </div>
         )}
       </Modal>
+      {/* Change Store Modal Dialog */}
+      {changeStoreFor && (
+        <ChangeStoreDialog
+          open={!!changeStoreFor}
+          orderId={changeStoreFor.id}
+          currentShopId={changeStoreFor.shop_id}
+          currentShopName={storeMap[changeStoreFor.shop_id] || `Store #${changeStoreFor.shop_id}`}
+          approvedStores={approvedStores}
+          storeMap={storeMap}
+          onClose={() => setChangeStoreFor(null)}
+          onSuccess={(updated, message, pdfFailed) => {
+            const nextShopId = updated?.shop_id ?? changeStoreFor.shop_id
+            setOrders((prev) => prev.map((o) => (o.id === changeStoreFor.id ? { ...o, shop_id: nextShopId } : o)))
+            setDetailModal((prev) => (prev && prev.id === changeStoreFor.id ? { ...prev, shop_id: nextShopId } : prev))
+            setEditModal((prev) => (prev && prev.order?.id === changeStoreFor.id ? { ...prev, order: { ...prev.order, shop_id: nextShopId } } : prev))
+            if (updated?.Invoice) {
+              setInvoice((inv) => (inv ? { ...inv, pdf_url: updated.Invoice.pdf_url } : inv))
+            }
+            notify(message, pdfFailed ? 'error' : 'success')
+          }}
+        />
+      )}
     </PageLayout>
   )
 }
