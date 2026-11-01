@@ -132,6 +132,7 @@ export default function Products() {
   const [loading, setLoading] = useState(true)
   const [msg, setMsg] = useState(null)
   const [collectionFilter, setCollectionFilter] = useState('All')
+  const [statusFilter, setStatusFilter] = useState('All')
   const [collections, setCollections] = useState([])
   const [importOpen, setImportOpen] = useState(false)
   const [importUploading, setImportUploading] = useState(false)
@@ -196,7 +197,8 @@ export default function Products() {
         subCategory: subCategoryFilter !== 'All' ? subCategoryFilter : undefined,
         sortBy,
         sortOrder,
-        collection_id: collectionFilter !== 'All' ? collectionFilter : undefined
+        collection_id: collectionFilter !== 'All' ? collectionFilter : undefined,
+        is_active: statusFilter === 'Active' ? 'true' : statusFilter === 'Inactive' ? 'false' : undefined
       })
         .then((res) => {
           setProducts(res.data.data.products || [])
@@ -204,7 +206,7 @@ export default function Products() {
         })
         .finally(() => setLoading(false))
     },
-    [debouncedSearch, categoryFilter, subCategoryFilter, sortBy, sortOrder, collectionFilter]
+    [debouncedSearch, categoryFilter, subCategoryFilter, sortBy, sortOrder, collectionFilter, statusFilter]
   )
 
   useEffect(() => { load(1) }, [load])
@@ -475,8 +477,19 @@ export default function Products() {
         />
       </TableToolbar>
 
-      {/* Product Collection Filter Row */}
+      {/* Product Collection + Active/Inactive Filter Row */}
       <FilterBar className="mb-4">
+        {['All', 'Active', 'Inactive'].map((st) => (
+          <Button
+            key={st}
+            variant={statusFilter === st ? 'primary' : 'secondary'}
+            onClick={() => setStatusFilter(st)}
+            className="py-1 px-3 whitespace-nowrap text-xs"
+          >
+            {st === 'All' ? 'All Statuses' : st}
+          </Button>
+        ))}
+        <span className="w-px h-5 bg-gray-200 mx-1" aria-hidden="true" />
         {[{ id: 'All', name: 'All Collections' }, { id: 'none', name: 'No Collection' }, ...collections].map((coll) => (
           <Button
             key={coll.id}

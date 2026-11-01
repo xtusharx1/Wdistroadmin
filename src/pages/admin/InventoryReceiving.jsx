@@ -26,6 +26,8 @@ export default function InventoryReceiving() {
   }, [activeTab, search])
 
   // Form states for New Stock Receipt
+  const [vendorName, setVendorName] = useState('')
+  const [vendorInvoiceNumber, setVendorInvoiceNumber] = useState('')
   const [remarks, setRemarks] = useState('')
   const [invoiceFile, setInvoiceFile] = useState(null)
   const [invoiceUrl, setInvoiceUrl] = useState('')
@@ -42,7 +44,7 @@ export default function InventoryReceiving() {
 
   const triggerNotification = (message, type = 'success') => {
     setNotify({ message, type })
-    setTimeout(() => setNotify(null), 4000)
+    setTimeout(() => setNotify(null), 5000)
   }
 
   // Fetch receiving history
@@ -132,6 +134,8 @@ export default function InventoryReceiving() {
         name: product.name,
         sku_id: product.sku_id || 'N/A',
         current_stock: product.stock_quantity ?? 0,
+        // Capture current price at time of adding for display purposes
+        current_price: product.price ?? null,
         quantity_received: 1
       }
     ])
@@ -154,6 +158,8 @@ export default function InventoryReceiving() {
 
   // Reset receiving form
   const handleResetForm = () => {
+    setVendorName('')
+    setVendorInvoiceNumber('')
     setRemarks('')
     setInvoiceFile(null)
     setInvoiceUrl('')
@@ -172,6 +178,8 @@ export default function InventoryReceiving() {
     setSubmitting(true)
     try {
       const payload = {
+        vendor_name: vendorName.trim() || null,
+        vendor_invoice_number: vendorInvoiceNumber.trim() || null,
         invoice_url: invoiceUrl || null,
         remarks: remarks || null,
         products: addedItems.map(item => ({
@@ -190,7 +198,8 @@ export default function InventoryReceiving() {
       }
     } catch (err) {
       console.error('Error saving receipt:', err)
-      triggerNotification(err.response?.data?.message || 'Failed to save inventory receipt.', 'error')
+      const msg = err.response?.data?.message || 'Failed to save inventory receipt.'
+      triggerNotification(msg, 'error')
     } finally {
       setSubmitting(false)
     }
@@ -266,10 +275,10 @@ export default function InventoryReceiving() {
           <div className="flex items-center gap-3">
             <input
               type="text"
-              placeholder="Search by receipt number (e.g. GRN-000001)..."
+              placeholder="Search by receipt number, vendor name, or vendor invoice no…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="flex-1 max-w-md border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="flex-1 max-w-lg border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
             <button
               onClick={loadHistory}
@@ -290,8 +299,8 @@ export default function InventoryReceiving() {
                 <table className="w-full text-sm text-left">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      {['S.No', 'Receipt Number', 'Total Products', 'Total Qty Received', 'Created By', 'Created At', 'View Invoice', 'View Details'].map((h) => (
-                        <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider ${h.includes('Qty') || h.includes('Products') ? 'text-center' : ''}`}>
+                      {['S.No', 'Receipt Number', 'Vendor', 'Vendor Invoice No.', 'Total Products', 'Total Qty', 'Created By', 'Created At', 'View Invoice', 'Details'].map((h) => (
+                        <th key={h} className={`px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider ${['Total Products','Total Qty'].includes(h) ? 'text-center' : ''}`}>
                           {h}
                         </th>
                       ))}
@@ -304,6 +313,8 @@ export default function InventoryReceiving() {
                         <tr key={r.id} className="hover:bg-gray-50 transition-colors">
                           <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * PAGE_SIZE + index + 1}</td>
                           <td className="px-4 py-3 font-semibold text-gray-900">{r.receipt_number}</td>
+                          <td className="px-4 py-3 text-gray-700">{r.vendor_name || <span className="text-gray-400 italic">—</span>}</td>
+                          <td className="px-4 py-3 text-gray-600 font-mono text-xs">{r.vendor_invoice_number || <span className="text-gray-400 italic">—</span>}</td>
                           <td className="px-4 py-3 text-center">{r.items?.length || 0}</td>
                           <td className="px-4 py-3 text-center font-medium">{totalQty}</td>
                           <td className="px-4 py-3">
@@ -355,12 +366,40 @@ export default function InventoryReceiving() {
         /* New Stock Receipt Form */
         <form onSubmit={handleSaveReceipt} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Left side remarks/details */}
+            {/* Left side: vendor info + remarks */}
             <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm space-y-4 md:col-span-2">
               <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-2 mb-2">Receipt Details</h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <Field label="Vendor / Supplier Name (Optional)">
+                  <input
+                    type="text"
+                    placeholder="e.g. ABC Distributors"
+                    value={vendorName}
+                    onChange={(e) => setVendorName(e.target.value)}
+                    maxLength={255}
+                    className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+                  />
+                </Field>
+
+                <Field label="Vendor Invoice Number (Optional)">
+                  <input
+                    type="text"
+                    placeholder="e.g. INV-2026-4891"
+                    value={vendorInvoiceNumber}
+                    onChange={(e) => setVendorInvoiceNumber(e.target.value)}
+                    maxLength={255}
+                    className="border border-gray-300 rounded-md px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500 w-full"
+                  />
+                  <p className="text-2xs text-gray-400 mt-1">
+                    When vendor name + invoice number are both set, duplicate submissions are blocked.
+                  </p>
+                </Field>
+              </div>
+
               <Field label="Remarks (Optional)">
                 <textarea
-                  rows={4}
+                  rows={3}
                   placeholder="Any additional notes or receiving comments..."
                   value={remarks}
                   onChange={(e) => setRemarks(e.target.value)}
@@ -369,7 +408,7 @@ export default function InventoryReceiving() {
               </Field>
             </div>
 
-            {/* Right side file upload */}
+            {/* Right side: file upload */}
             <div className="bg-white border border-gray-200 rounded-lg p-5 shadow-sm space-y-4">
               <h3 className="text-sm font-semibold text-gray-900 border-b border-gray-100 pb-2 mb-2">Supplier Invoice</h3>
               
@@ -438,9 +477,9 @@ export default function InventoryReceiving() {
                 <div className="absolute right-3 bottom-3 text-xs text-gray-400">Searching…</div>
               )}
 
-              {/* Autocomplete Dropdown */}
+              {/* Autocomplete Dropdown — shows price + stock */}
               {searchResults.length > 0 && (
-                <div className="absolute left-0 right-0 mt-1.5 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto z-10 divide-y divide-gray-100">
+                <div className="absolute left-0 right-0 mt-1.5 bg-white border border-gray-200 rounded-md shadow-lg max-h-72 overflow-y-auto z-10 divide-y divide-gray-100">
                   {searchResults.map((product) => (
                     <button
                       key={product.id}
@@ -452,9 +491,14 @@ export default function InventoryReceiving() {
                         <p className="font-semibold text-gray-900">{product.name}</p>
                         <p className="text-xs text-gray-400">SKU: {product.sku_id || 'N/A'}</p>
                       </div>
-                      <span className="text-2xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
-                        Stock: {product.stock_quantity ?? 0}
-                      </span>
+                      <div className="text-right flex-shrink-0 ml-4 space-y-0.5">
+                        {product.price != null && (
+                          <p className="text-xs font-semibold text-indigo-700">${Number(product.price).toFixed(2)}</p>
+                        )}
+                        <p className="text-2xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded font-medium">
+                          Stock: {product.stock_quantity ?? 0}
+                        </p>
+                      </div>
                     </button>
                   ))}
                 </div>
@@ -471,7 +515,7 @@ export default function InventoryReceiving() {
                 <table className="w-full text-sm text-left">
                   <thead className="bg-gray-50 border-b border-gray-200">
                     <tr>
-                      {['Product Name', 'SKU', 'Current Stock', 'Quantity Received', 'Remove'].map((h) => (
+                      {['Product Name', 'SKU', 'Current Price', 'Current Stock', 'Qty Receiving', 'Remove'].map((h) => (
                         <th key={h} className="px-4 py-2.5 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           {h}
                         </th>
@@ -483,6 +527,9 @@ export default function InventoryReceiving() {
                       <tr key={item.product_id} className="hover:bg-gray-50/50 transition-colors">
                         <td className="px-4 py-3 font-medium text-gray-900">{item.name}</td>
                         <td className="px-4 py-3 text-gray-600">{item.sku_id}</td>
+                        <td className="px-4 py-3 text-indigo-700 font-semibold">
+                          {item.current_price != null ? `$${Number(item.current_price).toFixed(2)}` : <span className="text-gray-400">—</span>}
+                        </td>
                         <td className="px-4 py-3 text-gray-500 font-semibold">{item.current_stock}</td>
                         <td className="px-4 py-3">
                           <input
@@ -490,7 +537,7 @@ export default function InventoryReceiving() {
                             min="1"
                             value={item.quantity_received}
                             onChange={(e) => handleQtyChange(item.product_id, e.target.value)}
-                            className="w-32 border border-gray-300 rounded px-2.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="w-28 border border-gray-300 rounded px-2.5 py-1 text-sm text-center focus:outline-none focus:ring-2 focus:ring-indigo-500"
                           />
                         </td>
                         <td className="px-4 py-3">
@@ -535,7 +582,7 @@ export default function InventoryReceiving() {
       <Modal
         open={!!detailReceipt}
         onClose={() => setDetailReceipt(null)}
-        title={`Receipt Details`}
+        title={`Receipt Details — ${detailReceipt?.receipt_number || ''}`}
         size="lg"
       >
         {detailReceipt && (
@@ -556,6 +603,18 @@ export default function InventoryReceiving() {
                 <p className="text-3xs uppercase tracking-wider text-gray-400 font-bold">Created At</p>
                 <p className="font-semibold text-gray-900 mt-0.5">{fmtDate(detailReceipt.created_at)}</p>
               </div>
+              {detailReceipt.vendor_name && (
+                <div>
+                  <p className="text-3xs uppercase tracking-wider text-gray-400 font-bold">Vendor</p>
+                  <p className="font-semibold text-gray-900 mt-0.5">{detailReceipt.vendor_name}</p>
+                </div>
+              )}
+              {detailReceipt.vendor_invoice_number && (
+                <div>
+                  <p className="text-3xs uppercase tracking-wider text-gray-400 font-bold">Vendor Invoice No.</p>
+                  <p className="font-semibold text-gray-900 mt-0.5 font-mono">{detailReceipt.vendor_invoice_number}</p>
+                </div>
+              )}
             </div>
 
             {/* Remarks */}

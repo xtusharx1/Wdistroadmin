@@ -76,7 +76,7 @@ export default function SellerOrders() {
     const timer = setTimeout(async () => {
       setAddLoading(true)
       try {
-        const res = await getProducts({ search: addSearch.trim(), limit: 8 })
+        const res = await getProducts({ search: addSearch.trim(), limit: 8, is_active: 'true' })
         const products = res.data.data.products || []
         const draftIds = new Set((editModal.items || []).map(i => i.product_id))
         setAddResults(products.filter(p => !draftIds.has(p.id)))

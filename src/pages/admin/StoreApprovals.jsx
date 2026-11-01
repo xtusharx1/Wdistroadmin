@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { getShops, approveShop, rejectShop, resetShopPassword, updateShop, deleteShop, getUsers, createAssignment } from '../../api'
+import { getShops, approveShop, rejectShop, resetShopPassword, updateShop, deleteShop, getUsers, createAssignment, getStoreBalances } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, ConfirmationDialog, Pagination } from '../../components/DesignSystem'
 import ShopPermitsTab from './ShopPermitsTab'
+import StoreAccountDialog, { StoreBalanceBadge } from './StoreAccount'
 
 const FILTERS = ['All', 'Pending', 'Approved', 'Rejected']
 
@@ -43,6 +44,8 @@ export default function StoreApprovals() {
   const [allowExplicit, setAllowExplicit] = useState(false)
 
   const [permitsFor, setPermitsFor] = useState(null)
+  const [accountFor, setAccountFor] = useState(null)
+  const [balances, setBalances] = useState({})
 
   const notify = (text, type = 'success') => {
     setMsg({ text, type })
@@ -53,6 +56,9 @@ export default function StoreApprovals() {
     getShops()
       .then((res) => setStores(res.data.data.shops || []))
       .finally(() => setLoading(false))
+    getStoreBalances()
+      .then((res) => setBalances(Object.fromEntries((res.data.data.balances || []).map((b) => [b.shop_id, b]))))
+      .catch(() => setBalances({}))
   }
 
   useEffect(() => {
@@ -213,9 +219,10 @@ export default function StoreApprovals() {
 
   const tableHeaders = [
     { label: 'S.No', width: '5%', align: 'center' },
-    { label: 'Store Name', width: '25%' },
-    { label: 'Seller Permit No.', width: '15%' },
-    { label: 'Tobacco License No.', width: '15%' },
+    { label: 'Store Name', width: '22%' },
+    { label: 'Seller Permit No.', width: '12%' },
+    { label: 'Tobacco License No.', width: '12%' },
+    { label: 'Balance', width: '12%' },
     { label: 'Status', width: '10%' },
     { label: 'Permit Files', width: '12%' },
     { label: 'Actions', width: '18%' }
@@ -315,6 +322,13 @@ export default function StoreApprovals() {
               )}
             </td>
 
+            {/* Balance: net receivable / payable */}
+            <td className="px-4 py-3 align-middle whitespace-nowrap">
+              <button type="button" onClick={() => setAccountFor(s)} className="text-left hover:underline" title="Open store account">
+                <StoreBalanceBadge balance={balances[s.id] || { net_position: 'settled', net_balance: 0 }} />
+              </button>
+            </td>
+
             {/* 5. Status (10%) */}
             <td className="px-4 py-3 align-middle whitespace-nowrap">
               <StatusBadge status={s.approval_status} type="approval" />
@@ -356,6 +370,12 @@ export default function StoreApprovals() {
                     Reject
                   </button>
                 )}
+                <button
+                  onClick={() => setAccountFor(s)}
+                  className="px-2.5 py-1 text-xs font-semibold rounded-md bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 transition-colors leading-none whitespace-nowrap"
+                >
+                  Account
+                </button>
                 <button
                   onClick={() => openEditModal(s)}
                   className="px-2.5 py-1 text-xs font-semibold rounded-md bg-amber-500 hover:bg-amber-600 text-white transition-colors shadow-2xs leading-none whitespace-nowrap"
@@ -575,6 +595,9 @@ export default function StoreApprovals() {
           </div>
         </form>
       </Modal>
+
+      {/* Store Account (receivable / payable) */}
+      {accountFor && <StoreAccountDialog store={accountFor} onClose={() => setAccountFor(null)} />}
 
       {/* Permits Management Modal */}
       <Modal

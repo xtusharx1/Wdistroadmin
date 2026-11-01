@@ -76,14 +76,15 @@ export const downloadImportTemplate = () =>
 // ── Orders ──────────────────────────────────────────────────────────────────
 export const getOrders = () => http.get('/orders')
 export const createOrder = (data) => http.post('/orders', data)
-export const processOrder = (id, items) =>
-  http.patch(`/orders/${id}/process`, { items })
+export const processOrder = (id, items, createFollowupOrder = false) =>
+  http.patch(`/orders/${id}/process`, { items, create_followup_order: createFollowupOrder })
 export const updateOrderStatus = (id, status) =>
   http.patch(`/orders/${id}/status`, { status })
 export const editOrder = (id, items) =>
   http.put(`/orders/${id}/edit`, { items })
 export const getOrderLogs = (orderId) => http.get(`/orders/${orderId}/logs`)
 export const deleteOrder = (id) => http.delete(`/orders/${id}`)
+export const changeOrderStore = (id, shop_id) => http.patch(`/orders/${id}/store`, { shop_id })
 
 
 // ── Invoices ────────────────────────────────────────────────────────────────
@@ -93,6 +94,7 @@ export const regenerateInvoice = (invoiceId) => http.post(`/invoices/${invoiceId
 export const addInvoicePayment = (invoiceId, data) => http.post(`/invoices/${invoiceId}/payments`, data)
 export const getInvoicePayments = (invoiceId) => http.get(`/invoices/${invoiceId}/payments`)
 export const getAllPayments = (params) => http.get('/invoices/payments', { params })
+export const bulkDownloadInvoices = (orderIds) => http.post('/invoices/bulk-download', { order_ids: orderIds }, { responseType: 'blob' })
 export const updatePayment = (paymentId, data) => http.patch(`/invoices/payments/${paymentId}`, data)
 
 // ── Returns & Credit Notes ──────────────────────────────────────────────────
@@ -153,3 +155,11 @@ export const deleteCollection = (id) => http.delete(`/collections/${id}`)
 
 // ── Customer Payments ───────────────────────────────────────────────────────
 export const getCustomerPayments = (customerId) => http.get(`/customers/${customerId}/payments`)
+
+// ── Store account (receivable / payable) ────────────────────────────────────
+export const getStoreBalances = () => http.get('/customers/balances')
+export const getStoreBalance = (shopId) => http.get(`/customers/${shopId}/balance`)
+export const getStoreOrderBalances = (shopId, params) => http.get(`/customers/${shopId}/payment-history`, { params })
+export const getStoreOrderTimeline = (shopId, orderId) => http.get(`/customers/${shopId}/orders/${orderId}/payment-history`)
+export const getStorePayments = (shopId, params) => http.get(`/customers/${shopId}/payments-list`, { params })
+export const getStoreCreditNotes = (shopId) => http.get(`/customers/${shopId}/credit-notes`)

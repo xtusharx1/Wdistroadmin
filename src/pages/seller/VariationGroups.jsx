@@ -107,7 +107,7 @@ export default function VariationGroups() {
     setSearching(true)
     const t = setTimeout(async () => {
       try {
-        const res = await getProducts({ search: searchQuery, limit: 20 })
+        const res = await getProducts({ search: searchQuery, limit: 20, is_active: 'true' })
         setSearchResults(res.data.data.products)
       } catch {
         setSearchResults([])

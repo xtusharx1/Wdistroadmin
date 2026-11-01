@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { getOrders, getShops, getInvoice, regenerateInvoice, addInvoicePayment } from '../../api'
+import { getOrders, getShops, getInvoice, regenerateInvoice, addInvoicePayment, bulkDownloadInvoices } from '../../api'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, LoadingState, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 import StatusBadge from '../../components/StatusBadge'
 
@@ -24,6 +24,10 @@ export default function AdminInvoices() {
   const [settling, setSettling] = useState(false)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
+  const [selected, setSelected] = useState(() => new Set())
+  const [downloading, setDownloading] = useState(false)
+  const BULK_LIMIT = 100 // matches the server's per-download limit
+  const [bulkMsg, setBulkMsg] = useState(null)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
@@ -96,6 +100,47 @@ export default function AdminInvoices() {
     const matchesDate = orderDate.includes(q) || orderDate.replace(/\//g, '').includes(q.replace(/\//g, ''))
     return String(o.id).includes(q) || invId.includes(q) || invNo.includes(q) || storeName.includes(q) || matchesDate
   })
+  const selectable = visibleOrders.filter((o) => o.Invoice?.id)
+  const allSelected = selectable.length > 0 && selectable.every((o) => selected.has(o.id))
+  const toggleOne = (id) => setSelected((prev) => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const toggleAll = () => setSelected((prev) => {
+    const next = new Set(prev)
+    if (allSelected) selectable.forEach((o) => next.delete(o.id))
+    else selectable.forEach((o) => next.add(o.id))
+    return next
+  })
+
+  const downloadSelected = async () => {
+    if (downloading || selected.size === 0) return
+    setDownloading(true)
+    setBulkMsg(null)
+    try {
+      const res = await bulkDownloadInvoices([...selected])
+      const name = /filename="([^"]+)"/.exec(res.headers['content-disposition'] || '')?.[1] || 'invoices.zip'
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+      const included = Number(res.headers['x-invoices-included'] || 0)
+      const skipped = Number(res.headers['x-invoices-skipped'] || 0)
+      setBulkMsg({ type: skipped ? 'warn' : 'ok', text: `Downloaded ${included} invoice${included === 1 ? '' : 's'}${skipped ? `; ${skipped} could not be included (see _summary.txt in the ZIP)` : ''}.` })
+    } catch (err) {
+      let text = 'Failed to download invoices.'
+      try { text = JSON.parse(await err.response.data.text()).message || text } catch { /* not JSON */ }
+      setBulkMsg({ type: 'error', text })
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   const totalPages = Math.ceil(visibleOrders.length / pageSize)
   const paginatedOrders = visibleOrders.slice((page - 1) * pageSize, page * pageSize)
 
@@ -128,12 +173,37 @@ export default function AdminInvoices() {
         />
       </TableToolbar>
 
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="inline-flex items-center gap-2 text-xs font-medium text-gray-700 cursor-pointer">
+          <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={selectable.length === 0}
+            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+          Select all {selectable.length} shown
+        </label>
+        <Button onClick={downloadSelected} disabled={downloading || selected.size === 0 || selected.size > BULK_LIMIT} className="py-1 px-3">
+          {downloading ? 'Preparing ZIP…' : `Download Selected (${selected.size})`}
+        </Button>
+        {selected.size > BULK_LIMIT && (
+          <span className="text-xs font-medium text-amber-700">Select at most {BULK_LIMIT} invoices per download.</span>
+        )}
+        {selected.size > 0 && !downloading && (
+          <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:underline">Clear selection</button>
+        )}
+        {bulkMsg && (
+          <span className={`text-xs font-medium ${bulkMsg.type === 'error' ? 'text-red-600' : bulkMsg.type === 'warn' ? 'text-amber-700' : 'text-green-700'}`}>{bulkMsg.text}</span>
+        )}
+      </div>
+
       <DataTable
-        headers={['S.No', 'Invoice No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Action']}
+        headers={['', 'S.No', 'Invoice No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Action']}
         empty={visibleOrders.length === 0}
       >
         {paginatedOrders.map((o, index) => (
-          <tr key={o.id} className="hover:bg-gray-50">
+          <tr key={o.id} className={`hover:bg-gray-50 ${selected.has(o.id) ? 'bg-indigo-50/40' : ''}`}>
+            <td className="px-4 py-3 w-8">
+              <input type="checkbox" checked={selected.has(o.id)} onChange={() => toggleOne(o.id)} disabled={!o.Invoice?.id}
+                aria-label={`Select INV-${o.id}`} title={o.Invoice?.id ? '' : 'No invoice yet'}
+                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:opacity-40" />
+            </td>
             <td className="px-4 py-3 text-gray-500 font-medium">{(page - 1) * pageSize + index + 1}</td>
             <td className="px-4 py-3 font-semibold text-indigo-600 whitespace-nowrap">
               {o.Invoice?.id ? `INV-${o.id}` : '—'}

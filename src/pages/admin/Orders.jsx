@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { getOrders, getShops, updateOrderStatus, deleteOrder, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment, editOrder, getProducts, getOrderLogs, createOrder } from '../../api'
+import { getOrders, getShops, updateOrderStatus, deleteOrder, changeOrderStore, getInvoice, generateInvoice, regenerateInvoice, processOrder, addInvoicePayment, editOrder, getProducts, getOrderLogs, createOrder } from '../../api'
 import StatusBadge from '../../components/StatusBadge'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 
@@ -27,12 +27,14 @@ const ACTION_LABELS = {
   item_removed: 'Removed',
   quantity_changed: 'Qty Changed',
   price_changed: 'Price Changed',
+  store_changed: 'Store Changed',
 }
 const ACTION_COLORS = {
   item_added: 'bg-green-50 text-green-700 border-green-200',
   item_removed: 'bg-red-50 text-red-700 border-red-200',
   quantity_changed: 'bg-blue-50 text-blue-700 border-blue-200',
   price_changed: 'bg-purple-50 text-purple-700 border-purple-200',
+  store_changed: 'bg-amber-50 text-amber-700 border-amber-200',
 }
 const fmtLogVal = (action, val) => {
   if (!val) return '—'
@@ -40,6 +42,7 @@ const fmtLogVal = (action, val) => {
     return `Qty: ${val.quantity} · ${fmt(val.price)}`
   if (action === 'quantity_changed') return `${val.quantity} units`
   if (action === 'price_changed') return fmt(val.price)
+  if (action === 'store_changed') return val.shop_name || `Store #${val.shop_id}`
   return JSON.stringify(val)
 }
 
@@ -47,6 +50,8 @@ export default function AdminOrders() {
   const [orders, setOrders] = useState([])
   const [shopsList, setShopsList] = useState([])
   const [storeMap, setStoreMap] = useState({})
+  const [approvedStores, setApprovedStores] = useState([])
+  const [storeEdit, setStoreEdit] = useState(null) // { shopId, saving, error }
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
@@ -100,6 +105,7 @@ export default function AdminOrders() {
       const stores = sRes.data.data.shops || []
       setShopsList(stores)
       setStoreMap(stores.reduce((m, s) => ({ ...m, [s.id]: s.shop_name }), {}))
+      setApprovedStores(stores.filter((s) => s.approval_status === 'Approved').sort((a, b) => a.shop_name.localeCompare(b.shop_name)))
     }).finally(() => setLoading(false))
   }, [])
 
@@ -112,6 +118,7 @@ export default function AdminOrders() {
     setSettleRemarks('')
     setPayments([])
     setDetailTab('details')
+    setStoreEdit(null)
     setEditLogs([])
     if (detail) {
       setLoadingInvoice(true)
@@ -220,7 +227,7 @@ export default function AdminOrders() {
     editDebounceRef.current = setTimeout(async () => {
       setEditSearching(true)
       try {
-        const res = await getProducts({ search: editSearch, limit: 20, page: 1 })
+        const res = await getProducts({ search: editSearch, limit: 20, page: 1, is_active: 'true' })
         setEditSearchResults(res.data.data.products)
       } catch {
         setEditSearchResults([])
@@ -253,7 +260,7 @@ export default function AdminOrders() {
     createDebounceRef.current = setTimeout(async () => {
       setCreateProductSearching(true)
       try {
-        const res = await getProducts({ search: createProductSearch, limit: 20, page: 1 })
+        const res = await getProducts({ search: createProductSearch, limit: 20, page: 1, is_active: 'true' })
         setCreateProductResults(res.data.data.products || [])
       } catch {
         setCreateProductResults([])
@@ -455,8 +462,12 @@ export default function AdminOrders() {
         price: item.price,
         custom_price: item.custom_price || '',
         requested_qty: item.requested_qty,
-        approved_qty: item.requested_qty,
+        stock: item.Product?.stock_quantity ?? null,
+        inactive: item.Product?.is_active === false,
+        // Start from what can actually be fulfilled from stock
+        approved_qty: item.Product?.stock_quantity != null ? Math.min(item.requested_qty, Math.max(0, item.Product.stock_quantity)) : item.requested_qty,
       })),
+      createFollowup: false,
     })
   }
 
@@ -485,15 +496,17 @@ export default function AdminOrders() {
   const submitProcess = async () => {
     setUpdating('process')
     try {
-      await processOrder(
+      const hasShortfall = processModal.items.some((i) => i.approved_qty < i.requested_qty)
+      const res = await processOrder(
         processModal.order.id,
         processModal.items.map(({ id, approved_qty, custom_price }) => ({
           id,
           approved_qty,
           custom_price: custom_price !== '' && !isNaN(parseFloat(custom_price)) ? parseFloat(custom_price) : null
-        }))
+        })),
+        hasShortfall && processModal.createFollowup
       )
-      notify('Order approved and processed successfully.')
+      notify(res.data.message && res.data.data?.followup_order_id ? res.data.message : 'Order approved and processed successfully.')
       setProcessModal(null)
       refresh()
       if (detail?.id === processModal.order.id) {
@@ -644,6 +657,11 @@ export default function AdminOrders() {
                     {o.source === 'Admin' && (
                       <span className="inline-flex items-center px-1.5 py-0.5 rounded text-3xs font-semibold bg-purple-50 text-purple-700 border border-purple-200" title="Manual / Admin Created">
                         Manual
+                      </span>
+                    )}
+                    {o.parent_order_id && (
+                      <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200" title="Created for items removed during approval">
+                        Follow-up of WS-{o.parent_order_id}
                       </span>
                     )}
                   </div>
@@ -834,8 +852,69 @@ export default function AdminOrders() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5 text-sm">
               <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Store</p>
-                <p className="font-medium">{storeMap[detail.shop_id] || `Store #${detail.shop_id}`}</p>
+                {storeEdit ? (
+                  <div className="mt-1 space-y-1.5">
+                    <select value={storeEdit.shopId} onChange={(e) => setStoreEdit({ ...storeEdit, shopId: e.target.value, error: null })}
+                      disabled={storeEdit.saving} aria-label="New store"
+                      className="w-full border border-gray-300 rounded-md px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                      {approvedStores.map((s) => <option key={s.id} value={s.id}>{s.shop_name}</option>)}
+                    </select>
+                    {storeEdit.error && <p className="text-xs text-red-600">{storeEdit.error}</p>}
+                    <p className="text-[11px] text-gray-400">Items, invoice and payments stay on this order and move with it.</p>
+                    <div className="flex gap-1.5">
+                      <button disabled={storeEdit.saving || Number(storeEdit.shopId) === detail.shop_id}
+                        onClick={async () => {
+                          setStoreEdit({ ...storeEdit, saving: true, error: null })
+                          try {
+                            const res = await changeOrderStore(detail.id, Number(storeEdit.shopId))
+                            const updated = res.data.data.order
+                            setDetail((d) => ({ ...d, shop_id: updated.shop_id }))
+                            setOrders((prev) => prev.map((o) => (o.id === updated.id ? { ...o, shop_id: updated.shop_id } : o)))
+                            if (updated.Invoice) setInvoice((inv) => (inv ? { ...inv, pdf_url: updated.Invoice.pdf_url } : inv))
+                            getOrderLogs(detail.id).then((r) => setEditLogs(r.data.data.logs || [])).catch(() => {})
+                            setStoreEdit(null)
+                            notify(res.data.message, res.data.data.invoice_pdf_failed ? 'error' : 'success')
+                          } catch (err) {
+                            setStoreEdit((s) => ({ ...s, saving: false, error: err.response?.data?.message || 'Failed to change store.' }))
+                          }
+                        }}
+                        className="text-xs px-2.5 py-1 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-medium disabled:opacity-50">
+                        {storeEdit.saving ? 'Saving…' : 'Save store'}
+                      </button>
+                      <button disabled={storeEdit.saving} onClick={() => setStoreEdit(null)}
+                        className="text-xs px-2.5 py-1 rounded bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium">Cancel</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="font-medium">
+                    {storeMap[detail.shop_id] || `Store #${detail.shop_id}`}
+                    {!['cancelled', 'rejected'].includes(detail.status) && (
+                      <button onClick={() => setStoreEdit({ shopId: detail.shop_id, saving: false, error: null })}
+                        className="ml-2 text-xs font-medium text-indigo-600 hover:underline">Change</button>
+                    )}
+                  </p>
+                )}
               </div>
+              {(detail.parent_order_id || orders.some((o) => o.parent_order_id === detail.id)) && (
+                <div>
+                  <p className="text-gray-400 text-xs uppercase tracking-wide">Linked Order</p>
+                  {detail.parent_order_id ? (
+                    <p className="font-medium text-xs mt-0.5">
+                      Follow-up of{' '}
+                      <button className="text-indigo-600 hover:underline font-semibold"
+                        onClick={() => { const p = orders.find((o) => o.id === detail.parent_order_id); if (p) setDetail(p) }}>
+                        WS-{detail.parent_order_id}
+                      </button>{' '}(items removed during its approval)
+                    </p>
+                  ) : orders.filter((o) => o.parent_order_id === detail.id).map((f) => (
+                    <p key={f.id} className="font-medium text-xs mt-0.5">
+                      Removed items moved to follow-up{' '}
+                      <button className="text-indigo-600 hover:underline font-semibold" onClick={() => setDetail(f)}>WS-{f.id}</button>
+                      <span className="text-gray-400"> · {f.status}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
               <div>
                 <p className="text-gray-400 text-xs uppercase tracking-wide">Order Source</p>
                 <p className="font-medium text-xs mt-0.5">
@@ -1393,7 +1472,7 @@ export default function AdminOrders() {
             <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden min-w-[540px]">
               <thead className="bg-gray-50">
                 <tr>
-                  {['Product', 'Unit Price', 'Custom Price', 'Requested', 'Approve Qty', 'Subtotal'].map((h) => (
+                  {['Product', 'Unit Price', 'Custom Price', 'Requested', 'In Stock', 'Approve Qty', 'Subtotal'].map((h) => (
                     <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
@@ -1418,7 +1497,13 @@ export default function AdminOrders() {
                       />
                     </td>
                     <td className="px-3 py-2.5 text-gray-500">{item.requested_qty}</td>
-                    <td className="px-3 py-2.5">
+                    <td className="px-3 py-2.5 whitespace-nowrap">
+                      <span className={item.stock != null && item.stock < item.requested_qty ? 'text-red-600 font-semibold' : 'text-gray-500'}>
+                        {item.stock ?? '—'}
+                      </span>
+                      {item.inactive && <span className="ml-1 text-[10px] font-semibold text-gray-500">(inactive)</span>}
+                    </td>
+                    <td className="px-3 py-2.5 whitespace-nowrap">
                       <input
                         type="number"
                         min="0"
@@ -1430,6 +1515,10 @@ export default function AdminOrders() {
                             : 'border-gray-300'
                           }`}
                       />
+                      {item.approved_qty > 0 && (
+                        <button type="button" onClick={() => updateItemQty(item.id, 0)}
+                          className="ml-1.5 text-xs text-red-600 hover:underline" title="Remove this item from the order">Remove</button>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 font-medium">
                       {fmt((item.custom_price !== '' && !isNaN(parseFloat(item.custom_price)) ? parseFloat(item.custom_price) : item.price) * item.approved_qty)}
@@ -1439,6 +1528,21 @@ export default function AdminOrders() {
               </tbody>
             </table>
             </div>
+
+            {processModal.items.some((i) => i.approved_qty < i.requested_qty) && (
+              <label className="flex items-start gap-2 mb-4 p-3 rounded-lg border border-sky-200 bg-sky-50 text-sm text-sky-900 cursor-pointer">
+                <input type="checkbox" checked={processModal.createFollowup}
+                  onChange={(e) => setProcessModal((prev) => ({ ...prev, createFollowup: e.target.checked }))}
+                  className="mt-0.5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                <span>
+                  Create a separate manual order for the removed quantities
+                  <span className="block text-xs text-sky-700 mt-0.5">
+                    {processModal.items.filter((i) => i.approved_qty < i.requested_qty).map((i) => `${i.name} × ${i.requested_qty - i.approved_qty}`).join(', ')}
+                    {' '}· same store, pending, linked to WS-{processModal.order.id}
+                  </span>
+                </span>
+              </label>
+            )}
 
             <div className="flex items-center justify-between mb-5">
               <span className="text-sm text-gray-500">Approved Total</span>

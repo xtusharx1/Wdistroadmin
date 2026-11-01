@@ -24,6 +24,7 @@ export function ReturnItemsModal({ order, storeName, onClose, onSaved }) {
   const [error, setError] = useState('')
   const [itemErrors, setItemErrors] = useState([])
   const [requestKey] = useState(newRequestKey)
+  const [restock, setRestock] = useState(false)
 
   useEffect(() => {
     getOrderReturns(order.id)
@@ -58,6 +59,7 @@ export function ReturnItemsModal({ order, storeName, onClose, onSaved }) {
         // Today means "now"; another day is sent as local noon of that day
         return_date: returnDate && returnDate !== todayLocal() ? new Date(`${returnDate}T12:00:00`).toISOString() : undefined,
         request_key: requestKey,
+        restock_inventory: restock,
       })
       onSaved(res.data)
     } catch (err) {
@@ -155,7 +157,14 @@ export function ReturnItemsModal({ order, storeName, onClose, onSaved }) {
                   {excessCredit > 0 && <span className="text-amber-700"> · {money(excessCredit)} exceeds the balance due</span>}
                 </p>
               )}
-              <p className="text-3xs text-gray-400">Returned items are not added back to inventory.</p>
+              <label className="flex items-center gap-2 pt-1 text-xs text-gray-700 cursor-pointer select-none">
+                <input type="checkbox" checked={restock} onChange={(e) => setRestock(e.target.checked)} disabled={saving}
+                  className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                Add returned quantity back to inventory
+              </label>
+              <p className="text-[11px] text-gray-400">
+                {restock ? 'Stock will increase by the returned quantities, with a stock movement for each product.' : 'Stock will not change.'} The credit note is the same either way.
+              </p>
             </div>
             <div className="flex gap-2.5">
               <Button variant="secondary" onClick={onClose} disabled={saving}>Cancel</Button>
@@ -219,7 +228,10 @@ export function ReturnsHistory({ orderId, refreshKey, canProcess, onNotify }) {
             <div className="text-xs">
               <p className="font-semibold text-gray-900">
                 {r.CreditNote?.credit_note_number || `Return #${r.id}`}
-                <span className="ml-2 inline-flex text-3xs font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border bg-green-50 text-green-700 border-green-200">{r.status}</span>
+                <span className="ml-2 inline-flex text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border bg-green-50 text-green-700 border-green-200">{r.status}</span>
+                <span className={`ml-1.5 inline-flex text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${r.restock_inventory ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-gray-50 text-gray-500 border-gray-200'}`}>
+                  {r.restock_inventory ? `Restocked ${r.restocked_at ? fmtDate(r.restocked_at) : ''}`.trim() : 'Not restocked'}
+                </span>
               </p>
               <p className="text-gray-500 mt-0.5">
                 Returned {fmtDate(r.return_date)} · Against INV-{r.order_id} · By {r.CreatedBy?.name || (r.created_by_user_id ? `User #${r.created_by_user_id}` : '—')}
