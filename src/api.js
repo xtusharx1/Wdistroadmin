@@ -80,8 +80,8 @@ export const processOrder = (id, items, createFollowupOrder = false) =>
   http.patch(`/orders/${id}/process`, { items, create_followup_order: createFollowupOrder })
 export const updateOrderStatus = (id, status) =>
   http.patch(`/orders/${id}/status`, { status })
-export const editOrder = (id, items) =>
-  http.put(`/orders/${id}/edit`, { items })
+export const editOrder = (id, items, createFollowupOrder = false) =>
+  http.put(`/orders/${id}/edit`, { items, create_followup_order: createFollowupOrder })
 export const getOrderLogs = (orderId) => http.get(`/orders/${orderId}/logs`)
 export const deleteOrder = (id) => http.delete(`/orders/${id}`)
 export const changeOrderStore = (id, shop_id) => http.patch(`/orders/${id}/store`, { shop_id })

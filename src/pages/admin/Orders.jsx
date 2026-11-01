@@ -20,7 +20,7 @@ const NEXT_STATUS = {
   dispatched: ['delivered'],
 }
 
-const EDITABLE_STATUSES = ['pending', 'approved', 'dispatched']
+const EDITABLE_STATUSES = ['pending', 'approved', 'processed', 'dispatched']
 const RETURNABLE_STATUSES = ['delivered', 'completed']
 
 const ACTION_LABELS = {
@@ -216,6 +216,7 @@ export default function AdminOrders() {
   const [editSearching, setEditSearching] = useState(false)
   const [savingEdit, setSavingEdit] = useState(false)
   const [editError, setEditError] = useState(null)
+  const [editServeLater, setEditServeLater] = useState(false)
   const editDebounceRef = useRef(null)
 
   // Debounced product search for edit modal
@@ -390,6 +391,7 @@ export default function AdminOrders() {
     setEditSearch('')
     setEditSearchResults([])
     setEditError(null)
+    setEditServeLater(false)
     setEditModal(order)
   }
 
@@ -428,11 +430,44 @@ export default function AdminOrders() {
     )
   }
 
+  const editReducedItems = (() => {
+    if (!editModal || !editModal.OrderItems) return []
+    const originalItems = editModal.OrderItems.map((item) => ({
+      product_id: item.product_id,
+      name: item.Product?.name || `Product #${item.product_id}`,
+      original_qty: editModal.status === 'pending' ? item.requested_qty : (item.approved_qty ?? item.requested_qty),
+    }))
+    const reduced = []
+    for (const orig of originalItems) {
+      const current = editItems.find((i) => i.product_id === orig.product_id)
+      if (!current) {
+        reduced.push({ ...orig, removed_qty: orig.original_qty })
+      } else if (current.quantity < orig.original_qty) {
+        reduced.push({ ...orig, removed_qty: orig.original_qty - current.quantity })
+      }
+    }
+    return reduced
+  })()
+
   const submitEdit = async () => {
     if (editItems.length === 0) {
       setEditError('Order must have at least one item.')
       return
     }
+
+    // If quantities are reduced and Serve Later is unchecked, ask for confirmation
+    if (editReducedItems.length > 0 && !editServeLater) {
+      const totalRemoved = editReducedItems.reduce((sum, i) => sum + i.removed_qty, 0)
+      const breakdown = editReducedItems.map((i) => `• ${i.name}: ${i.removed_qty} removed`).join('\n')
+      const confirmed = window.confirm(
+        `"Serve Later" is unchecked.\n\n` +
+        `The following ${totalRemoved} item(s) will be permanently removed from order WS-${editModal.id} without creating a follow-up order:\n\n` +
+        `${breakdown}\n\n` +
+        `Are you sure you want to permanently remove these quantities?`
+      )
+      if (!confirmed) return
+    }
+
     setSavingEdit(true)
     setEditError(null)
     try {
@@ -442,7 +477,8 @@ export default function AdminOrders() {
           product_id,
           quantity,
           custom_price: custom_price !== '' && !isNaN(parseFloat(custom_price)) ? parseFloat(custom_price) : null,
-        }))
+        })),
+        editReducedItems.length > 0 && editServeLater
       )
       notify(res.data.message || 'Order updated successfully.', res.data.data?.invoice_pdf_failed ? 'error' : 'success')
       setEditModal(null)
@@ -1460,6 +1496,26 @@ export default function AdminOrders() {
                   </div>
                 )}
               </div>
+
+              {/* Serve Later Option for reduced items */}
+              {editReducedItems.length > 0 && (
+                <label className="flex items-start gap-2.5 p-3.5 rounded-lg border border-indigo-200 bg-indigo-50/70 text-sm text-indigo-950 cursor-pointer shadow-2xs">
+                  <input
+                    type="checkbox"
+                    checked={editServeLater}
+                    onChange={(e) => setEditServeLater(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer"
+                  />
+                  <div>
+                    <span className="font-semibold text-indigo-900">
+                      Serve Later
+                    </span>
+                    <span className="block text-xs text-indigo-700 mt-0.5">
+                      Create a separate manual follow-up order for the removed quantities ({editReducedItems.map((i) => `${i.name} × ${i.removed_qty}`).join(', ')}) · assigned to {storeMap[editModal.shop_id] || `Store #${editModal.shop_id}`} and linked to WS-{editModal.id}.
+                    </span>
+                  </div>
+                </label>
+              )}
 
               {/* Footer: total + actions */}
               <div className="flex items-center justify-between pt-4 border-t border-gray-200">
