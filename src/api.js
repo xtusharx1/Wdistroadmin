@@ -94,7 +94,7 @@ export const regenerateInvoice = (invoiceId) => http.post(`/invoices/${invoiceId
 export const addInvoicePayment = (invoiceId, data) => http.post(`/invoices/${invoiceId}/payments`, data)
 export const getInvoicePayments = (invoiceId) => http.get(`/invoices/${invoiceId}/payments`)
 export const getAllPayments = (params) => http.get('/invoices/payments', { params })
-export const bulkDownloadInvoices = (orderIds) => http.post('/invoices/bulk-download', { order_ids: orderIds }, { responseType: 'blob' })
+export const downloadInvoicePdf = (orderId) => http.get(`/invoices/${orderId}/pdf`, { responseType: 'blob', timeout: 60000 })
 export const updatePayment = (paymentId, data) => http.patch(`/invoices/payments/${paymentId}`, data)
 
 // ── Returns & Credit Notes ──────────────────────────────────────────────────

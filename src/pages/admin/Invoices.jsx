@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { getOrders, getShops, getInvoice, regenerateInvoice, addInvoicePayment, bulkDownloadInvoices } from '../../api'
+import { useState, useEffect, useRef } from 'react'
+import { getOrders, getShops, getInvoice, regenerateInvoice, addInvoicePayment, downloadInvoicePdf } from '../../api'
 import { PageLayout, PageHeader, Button, SearchBar, TableToolbar, FilterBar, DataTable, LoadingState, Dialog as Modal, Pagination } from '../../components/DesignSystem'
 import StatusBadge from '../../components/StatusBadge'
 
@@ -25,9 +25,12 @@ export default function AdminInvoices() {
   const [filter, setFilter] = useState('All')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState(() => new Set())
-  const [downloading, setDownloading] = useState(false)
-  const BULK_LIMIT = 100 // matches the server's per-download limit
-  const [bulkMsg, setBulkMsg] = useState(null)
+  const BULK_LIMIT = 100
+  const BULK_CONCURRENCY = 3
+  // Multi-download progress: { total, done, failed: [orderIds], running } (null until a download starts)
+  const [progress, setProgress] = useState(null)
+  const downloading = !!progress?.running
+  const doneRef = useRef(new Set()) // orders already saved in this batch, so a retry skips them
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
@@ -114,31 +117,51 @@ export default function AdminInvoices() {
     return next
   })
 
-  const downloadSelected = async () => {
-    if (downloading || selected.size === 0) return
-    setDownloading(true)
-    setBulkMsg(null)
-    try {
-      const res = await bulkDownloadInvoices([...selected])
-      const name = /filename="([^"]+)"/.exec(res.headers['content-disposition'] || '')?.[1] || 'invoices.zip'
-      const url = URL.createObjectURL(res.data)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = name
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 10000)
-      const included = Number(res.headers['x-invoices-included'] || 0)
-      const skipped = Number(res.headers['x-invoices-skipped'] || 0)
-      setBulkMsg({ type: skipped ? 'warn' : 'ok', text: `Downloaded ${included} invoice${included === 1 ? '' : 's'}${skipped ? `; ${skipped} could not be included (see _summary.txt in the ZIP)` : ''}.` })
-    } catch (err) {
-      let text = 'Failed to download invoices.'
-      try { text = JSON.parse(await err.response.data.text()).message || text } catch { /* not JSON */ }
-      setBulkMsg({ type: 'error', text })
-    } finally {
-      setDownloading(false)
+  // Each invoice is its own PDF download (no ZIP). A few are fetched at a time; each is saved as soon as it
+  // arrives and then released, so only a handful of PDFs are ever in memory. A failure never stops the rest.
+  const runDownloads = async (ids, total) => {
+    const failed = []
+    let next = 0
+    let done = total - ids.length
+    setProgress({ total, done, failed: [], running: true })
+    const worker = async () => {
+      while (next < ids.length) {
+        const id = ids[next++]
+        try {
+          const res = await downloadInvoicePdf(id)
+          const name = /filename="([^"]+)"/.exec(res.headers['content-disposition'] || '')?.[1] || `INV-${id}.pdf`
+          const url = URL.createObjectURL(res.data)
+          const a = document.createElement('a')
+          a.href = url
+          a.download = name
+          document.body.appendChild(a)
+          a.click()
+          a.remove()
+          setTimeout(() => URL.revokeObjectURL(url), 30000) // released right after the browser has taken it
+          doneRef.current.add(id)
+          done++
+          // browsers can drop downloads fired in the same instant; a short gap keeps them in order
+          await new Promise((r) => setTimeout(r, 250))
+        } catch {
+          failed.push(id)
+        }
+        setProgress({ total, done, failed: [...failed], running: true })
+      }
     }
+    await Promise.all(Array.from({ length: Math.min(BULK_CONCURRENCY, ids.length) }, worker))
+    setProgress({ total, done, failed: [...failed], running: false })
+  }
+
+  const downloadSelected = () => {
+    if (downloading || selected.size === 0) return
+    doneRef.current = new Set()
+    const ids = [...selected]
+    runDownloads(ids, ids.length)
+  }
+
+  const retryFailed = () => {
+    if (downloading || !progress?.failed.length) return
+    runDownloads([...progress.failed], progress.total)
   }
 
   const totalPages = Math.ceil(visibleOrders.length / pageSize)
@@ -180,7 +203,7 @@ export default function AdminInvoices() {
           Select all {selectable.length} shown
         </label>
         <Button onClick={downloadSelected} disabled={downloading || selected.size === 0 || selected.size > BULK_LIMIT} className="py-1 px-3">
-          {downloading ? 'Preparing ZIP…' : `Download Selected (${selected.size})`}
+          {downloading ? 'Downloading…' : `Download Selected (${selected.size})`}
         </Button>
         {selected.size > BULK_LIMIT && (
           <span className="text-xs font-medium text-amber-700">Select at most {BULK_LIMIT} invoices per download.</span>
@@ -188,10 +211,40 @@ export default function AdminInvoices() {
         {selected.size > 0 && !downloading && (
           <button onClick={() => setSelected(new Set())} className="text-xs text-gray-500 hover:underline">Clear selection</button>
         )}
-        {bulkMsg && (
-          <span className={`text-xs font-medium ${bulkMsg.type === 'error' ? 'text-red-600' : bulkMsg.type === 'warn' ? 'text-amber-700' : 'text-green-700'}`}>{bulkMsg.text}</span>
-        )}
       </div>
+
+      {progress && (() => {
+        const failedN = progress.failed.length
+        const remaining = progress.total - progress.done - failedN
+        const finished = !progress.running
+        return (
+          <div className="fixed right-4 top-20 z-50 w-72 rounded-xl border border-gray-200 bg-white p-4 shadow-lg text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-semibold text-gray-800">
+                {finished ? (failedN ? 'Download finished with errors' : 'Download complete') : `Downloading ${progress.done}/${progress.total}`}
+              </span>
+              {finished && <button onClick={() => setProgress(null)} className="text-gray-400 hover:text-gray-600" aria-label="Dismiss">✕</button>}
+            </div>
+            <div className="h-1.5 w-full rounded bg-gray-100 overflow-hidden">
+              <div className="h-full bg-indigo-500 transition-all" style={{ width: `${((progress.done + failedN) / progress.total) * 100}%` }} />
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 font-medium text-gray-700">
+              <span>Total {progress.total}</span>
+              <span className="text-green-700">Done {progress.done}</span>
+              <span className={failedN ? 'text-red-600' : ''}>Failed {failedN}</span>
+              <span>Remaining {remaining}</span>
+            </div>
+            {failedN > 0 && <div className="text-red-600">Failed: {progress.failed.map((id) => `WS-${id}`).join(', ')}</div>}
+            {finished && failedN > 0 && (
+              <button onClick={retryFailed} className="rounded bg-indigo-600 px-3 py-1 font-medium text-white hover:bg-indigo-700">Retry {failedN} failed</button>
+            )}
+            <div className="text-gray-500">
+              Each invoice downloads as its own PDF. If the browser asks to allow multiple downloads, choose Allow; if files are missing,
+              allow automatic downloads for this site (address bar icon).
+            </div>
+          </div>
+        )
+      })()}
 
       <DataTable
         headers={['', 'S.No', 'Invoice No', 'Order ID', 'Store', 'Items', 'Total', 'Status', 'Date', 'Action']}
